@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" width="120" height="120">
+    <!-- Outer Circle -->
+    <circle cx="60" cy="60" r="58" fill="#2196F3" stroke="#1976D2" stroke-width="4" />
+
+    <!-- Browser Window -->
+    <rect x="35" y="40" width="50" height="30" rx="5" fill="#FFFFFF" stroke="#BBDEFB" stroke-width="2" />
+    <circle cx="42" cy="45" r="2" fill="#FF5252" />
+    <circle cx="48" cy="45" r="2" fill="#FFEB3B" />
+    <circle cx="54" cy="45" r="2" fill="#4CAF50" />
+
+    <!-- Abstract Design -->
+    <path d="M50 60 L70 60 L60 75 Z" fill="#64B5F6" />
+
+    <!-- Text -->
+    <text x="60" y="85" font-size="9" text-anchor="middle" fill="#FFFFFF" font-family="Verdana, sans-serif" font-weight="bold">MINIMAL BUILDER</text>
+</svg>
