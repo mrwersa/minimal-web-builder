@@ -59,6 +59,9 @@ def call_gemini(messages):
             "- Use modern CSS (Flexbox/Grid) but keep visual elements minimal\n"
             "- Avoid unnecessary frameworks, libraries, or decorative elements\n"
             "- Use a monochromatic or limited color palette\n"
+            "- ALL images/icons must be inline SVG (no external images or links)\n"
+            "- The HTML must be fully self-contained with NO external dependencies or CDN links\n"
+            "- If you generate navigation or tabs, do NOT use anchor links or change the URL. Use JavaScript to show/hide content sections for tab navigation. All navigation must be fully client-side and must not reload or redirect the page.\n"
             "- Return ONLY the complete HTML/CSS/JS code block, no explanations\n"
             "- The code should be ready to copy-paste and run\n\n"
             f"Conversation:\n{conversation}"
@@ -107,150 +110,107 @@ section.main, .element-container {
 # --- LAYOUT CSS (SEPARATE FROM STREAMLIT DEFAULTS) ---
 st.markdown("""
 <style>
-/* GLOBAL SETTINGS */
-html, body {
+html, body, .stApp {
     margin: 0;
     padding: 0;
     height: 100vh;
-    overflow: hidden;
+    overflow-x: hidden;
+    background: #f7f9fb;
 }
-
-/* BASE LAYOUT STRUCTURE - THREE PARTS */
 .app-frame {
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+}
+.main-scroll-area {
+    flex: 1 1 auto;
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    justify-content: flex-start;
+    padding: 0;
+    margin: 0;
+    overflow: hidden;
+    position: relative;
+    min-height: 0;
+}
+.sticky-tabs {
+    position: sticky !important;
+    top: 0 !important;
+    z-index: 1002 !important;
+    background: #f7f9fb !important;
+}
+.tab-content-scroll {
+    flex: 1 1 auto;
+    overflow-y: auto;
+    min-height: 0;
+    position: relative;
+    padding-bottom: 24px;
+}
+.app-footer, .stChatInput {
+}
+.stChatInput {
+    margin: 0 !important;
+    padding: 0 !important;
+    background: #f7f9fb !important;
+    box-shadow: none !important;
+    border-radius: 0 !important;
+}
+.stChatInput > div {
+    margin: 0 !important;
+    padding: 0 !important;
+    background: #f7f9fb !important;
+    box-shadow: none !important;
+    border-radius: 0 !important;
+}
+.stChatInput input, .stChatInput textarea {
+    color: #222 !important;
+    caret-color: #1976d2 !important;
+    padding: 12px 16px !important;
+    font-size: 1.08em !important;
+    background: #fff !important;
+    border: 1.5px solid #e3e8ee !important;
+    border-radius: 0 !important;
+    box-shadow: none !important;
+    outline: none !important;
+    transition: border 0.2s;
+.stChatInput input:focus, .stChatInput textarea:focus {
+    border: none !important;
+    outline: none !important;
+    background: #fff !important;
+}
+}
+.stChatInput input::placeholder, .stChatInput textarea::placeholder {
+    color: #78909c !important;
+    opacity: 1 !important;
+}
+.stChatInput input:disabled, .stChatInput textarea:disabled {
+    background: #f7f9fb !important;
+    color: #b0b8c1 !important;
+}
+}
     position: fixed !important;
-    top: 0;
     left: 0;
-    width: 100%;
-    height: 100vh;
-    display: flex;
-    flex-direction: column;
-    overflow: hidden;
-}
-
-/* 1. HEADER - Fixed at top */
-.app-header {
-    flex: 0 0 60px;
-    background: linear-gradient(to right, #2196F3, #1976D2);
-    color: white;
-    display: flex;
-    align-items: center;
-    padding: 0 20px;
-    box-shadow: 0 2px 4px rgba(0,0,0,0.2);
-    z-index: 1000;
-}
-
-.logo {
-    display: flex;
-    align-items: center;
-}
-
-.logo img {
-    height: 32px;
-    margin-right: 10px;
-}
-
-.app-title {
-    font-size: 20px;
-    font-weight: 600;
-    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-}
-
-/* 2. MAIN CONTENT - Fill available space */
-.app-content {
-    flex: 1;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: 20px;
-    overflow: hidden;
-}
-
-/* 3. FOOTER - Fixed at bottom */
-.app-footer {
-    flex: 0 0 60px;
+    right: 0;
+    bottom: 0;
+    width: 100vw;
+    z-index: 2000;
+    background: white;
     border-top: 1px solid #e9ecef;
+    margin: 0 !important;
     padding: 0 20px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    background: white;
-    z-index: 1000;
 }
-
-/* Empty state mockup */
-.browser-mockup {
-    width: 380px;
-    height: 280px;
-    border: 2px dashed #dee2e6;
-    border-radius: 8px;
-    background: white;
-    overflow: hidden;
-    box-shadow: 0 4px 10px rgba(0,0,0,0.1);
 }
-
-.browser-bar {
-    height: 28px;
-    background: #f0f2f5;
-    display: flex;
-    align-items: center;
-    padding-left: 10px;
-    border-radius: 6px 6px 0 0;
-}
-
-.browser-dot {
-    width: 8px;
-    height: 8px;
-    border-radius: 50%;
-    margin-right: 6px;
-}
-
-.red-dot {background: #ff6b6b;}
-.yellow-dot {background: #ffd43b;}
-.green-dot {background: #69db7c;}
-
-.browser-content {
-    height: calc(100% - 28px);
-    padding: 20px;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    gap: 12px;
-}
-
-.content-line {
-    height: 6px;
-    border-radius: 3px;
-    background: #f0f2f5;
-}
-
-.empty-state-message {
-    margin-top: 15px;
-    font-size: 14px;
-    color: #6c757d;
-    text-align: center;
-}
-
-/* Generated site preview */
 .preview-container {
     width: 100%;
+    flex: 1 1 auto;
+    min-height: 0;
     height: 100%;
     display: flex;
     flex-direction: column;
+    align-items: stretch;
+    justify-content: flex-start;
 }
-
-.preview-header {
-    display: flex;
-    justify-content: flex-end;
-    padding: 10px;
-}
-
-.preview-content {
-    flex: 1;
-    overflow: hidden;
-}
-
-/* Status indicator */
 .status-indicator {
     position: absolute;
     left: 50%;
@@ -263,146 +223,176 @@ html, body {
     font-size: 14px;
     z-index: 1001;
 }
-
-/* Override for Streamlit elements */
 .stButton, .stDownloadButton {
     margin: 0 !important;
 }
-
-.stChatInput {
-    margin-bottom: 0 !important;
-}
-
-.stApp {
-    overflow: hidden !important;
-}
-
-/* Fix iframe sizing */
 iframe {
-    width: 100% !important;
+    width: 100vw !important;
+    max-width: 100% !important;
     height: 100% !important;
+    min-height: 0 !important;
     border: none !important;
+    display: block;
+    overflow: auto !important;
 }
-
-/* No scrollbars anywhere */
-* {
-    scrollbar-width: none !important;
-    -ms-overflow-style: none !important;
+.stTabs [data-baseweb="tab-list"] {
+    background: #fff;
+    border-radius: 10px 10px 0 0;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+    border-bottom: 1.5px solid #e3e8ee;
+    padding-left: 12px;
 }
-*::-webkit-scrollbar {
-    display: none !important;
+.stTabs [data-baseweb="tab"] {
+    font-size: 1.08em;
+    font-weight: 500;
+    color: #1976d2;
+    padding: 12px 24px 10px 24px;
+    margin-right: 2px;
+    border-radius: 10px 10px 0 0;
+    background: #f7f9fb;
+    transition: background 0.2s, color 0.2s;
+}
+.stTabs [aria-selected="true"] {
+    background: #1976d2 !important;
+    color: #fff !important;
+    box-shadow: 0 2px 8px rgba(25,118,210,0.08);
+}
+.stTabs [data-baseweb="tab-panel"] {
+    padding-top: 0 !important;
+    margin-top: 0 !important;
 }
 </style>
 """, unsafe_allow_html=True)
 
 # --- START APP LAYOUT ---
-st.markdown("""
-<div class="app-frame">
-    <!-- HEADER -->
-    <div class="app-header">
-        <div class="logo">
-            <img src="data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxMjAgMTIwIiB3aWR0aD0iMzAiIGhlaWdodD0iMzAiPjxjaXJjbGUgY3g9IjYwIiBjeT0iNjAiIHI9IjU4IiBmaWxsPSIjMjE5NkYzIiBzdHJva2U9IiMxOTc2RDIiIHN0cm9rZS13aWR0aD0iNCIgLz48cmVjdCB4PSIzNSIgeT0iNDAiIHdpZHRoPSI1MCIgaGVpZ2h0PSIzMCIgcng9IjUiIGZpbGw9IiNGRkZGRkYiIHN0cm9rZT0iI0JCREVGQiIgc3Ryb2tlLXdpZHRoPSIyIiAvPjxjaXJjbGUgY3g9IjQyIiBjeT0iNDUiIHI9IjIiIGZpbGw9IiNGRjUyNTIiIC8+PGNpcmNsZSBjeD0iNDgiIGN5PSI0NSIgcj0iMiIgZmlsbD0iI0ZGRUIzQiIgLz48Y2lyY2xlIGN4PSI1NCIgY3k9IjQ1IiByPSIyIiBmaWxsPSIjNENBRjUwIiAvPjxwYXRoIGQ9Ik01MCA2MCBMNzAgNjAgTDYwIDc1IFoiIGZpbGw9IiM2NEI1RjYiIC8+PHRleHQgeD0iNjAiIHk9Ijg1IiBmb250LXNpemU9IjkiIHRleHQtYW5jaG9yPSJtaWRkbGUiIGZpbGw9IiNGRkZGRkYiIGZvbnQtZmFtaWx5PSJWZXJkYW5hLCBzYW5zLXNlcmlmIiBmb250LXdlaWdodD0iYm9sZCI+TUlOSU1BTCBCVUlMREVSPC90ZXh0Pjwvc3ZnPg==" alt="Logo">
-            <span class="app-title">Minimal Web Builder</span>
-        </div>
-    </div>
 
-    <!-- MAIN CONTENT -->
-    <div class="app-content">
-""", unsafe_allow_html=True)
 
 # CONTENT AREA - Either empty state or generated preview
-if not st.session_state.last_app_code:
-    # Empty state mockup
-    st.markdown("""
-    <div style="text-align: center;">
-        <div class="browser-mockup">
-            <div class="browser-bar">
-                <span class="browser-dot red-dot"></span>
-                <span class="browser-dot yellow-dot"></span>
-                <span class="browser-dot green-dot"></span>
-            </div>
-            <div class="browser-content">
-                <div class="content-line" style="width: 70%;"></div>
-                <div class="content-line" style="width: 40%;"></div>
-                <div class="content-line" style="width: 80%;"></div>
-                <div class="content-line" style="width: 55%;"></div>
-                <div class="content-line" style="width: 30%;"></div>
-            </div>
-        </div>
-        <p class="empty-state-message">Describe your website idea in the chat below</p>
-    </div>
-    """, unsafe_allow_html=True)
-else:
-    # Show generated website
-    if st.session_state.show_preview:
-        # Clean up code if needed (remove markdown formatting)
-        preview_code = st.session_state.last_app_code
-        if preview_code.strip().startswith("```html"):
-            preview_code = preview_code.strip()[7:]  # Remove leading ```html
-            if preview_code.endswith("```"):
-                preview_code = preview_code[:-3]  # Remove trailing ```
 
-        # Preview container with button
-        st.markdown('<div class="preview-container">', unsafe_allow_html=True)
+# --- TABS: Preview | Code ---
 
-        # Control buttons at top
-        col1, col2, col3 = st.columns([1, 1, 8])
-        with col1:
-            if st.button("View Code"):
-                st.session_state.show_preview = False
-                st.rerun()
-        with col2:
-            st.download_button(
-                label="Download HTML",
-                data=preview_code,
-                file_name="minimal_website.html",
-                mime="text/html"
-            )
-
-        # Actual preview iframe - fixed height
-        components.html(preview_code, height=500, scrolling=False)
-        st.markdown('</div>', unsafe_allow_html=True)
-    else:
-        # Code view
-        code = st.session_state.last_app_code
-        if code.strip().startswith("```html"):
-            code = code.strip()[7:]  # Remove leading ```html
-            if code.endswith("```"):
-                code = code[:-3]  # Remove trailing ```
-
-        st.code(code, language="html")
-
-        if st.button("Back to Preview"):
-            st.session_state.show_preview = True
-            st.rerun()
-
-# Close content div
+# --- Custom layout for sticky tabs and fixed chat input ---
+tab_labels = ["Preview", "Code"]
+tab1, tab2 = st.tabs(tab_labels)
+st.markdown('<div class="main-scroll-area">', unsafe_allow_html=True)
+st.markdown('<div class="sticky-tabs">', unsafe_allow_html=True)
 st.markdown('</div>', unsafe_allow_html=True)
+st.markdown('<div class="tab-content-scroll">', unsafe_allow_html=True)
+if st.session_state.last_app_code:
+    preview_code = st.session_state.last_app_code
+    if preview_code.strip().startswith("```html"):
+        preview_code = preview_code.strip()[7:]
+        if preview_code.endswith("```"):
+            preview_code = preview_code[:-3]
+    with tab1:
+        container_class = "preview-container"
+        if st.session_state.is_generating:
+            container_class += " blur"
+        st.markdown(f'<div class="{container_class}" style="position:relative;min-height:0;flex:1;">', unsafe_allow_html=True)
+        components.html(preview_code, height=500, scrolling=False)
+        if st.session_state.is_generating:
+            st.markdown('''
+<style>
+.preview-loader-overlay {
+    position: absolute;
+    top: 0; left: 0; right: 0; bottom: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    background: rgba(247,249,251,0.65);
+    z-index: 10;
+    backdrop-filter: blur(2.5px);
+}
+.preview-loader-spinner {
+    width: 54px;
+    height: 54px;
+    margin-bottom: 18px;
+    display: block;
+}
+.preview-loader-message {
+    font-size: 1.13em;
+    color: #1976d2 !important;
+    font-weight: 500;
+    letter-spacing: 0.01em;
+    text-align: center;
+    margin-top: 0;
+    text-shadow: 0 1px 4px #fff, 0 0 2px #f7f9fb;
+}
+</style>
+<div class="preview-loader-overlay">
+    <svg class="preview-loader-spinner" viewBox="0 0 50 50">
+        <circle cx="25" cy="25" r="20" fill="none" stroke="#1976d2" stroke-width="5" stroke-linecap="round" stroke-dasharray="31.4 31.4" stroke-dashoffset="0">
+            <animateTransform attributeName="transform" type="rotate" from="0 25 25" to="360 25 25" dur="0.9s" repeatCount="indefinite"/>
+        </circle>
+        <circle cx="25" cy="25" r="12" fill="none" stroke="#90caf9" stroke-width="3" stroke-linecap="round" stroke-dasharray="18.8 18.8" stroke-dashoffset="0">
+            <animateTransform attributeName="transform" type="rotate" from="360 25 25" to="0 25 25" dur="1.2s" repeatCount="indefinite"/>
+        </circle>
+    </svg>
+    <div class="preview-loader-message">Generating your minimalist website...</div>
+</div>
+''', unsafe_allow_html=True)
+        st.markdown('</div>', unsafe_allow_html=True)
+    with tab2:
+        st.code(preview_code, language="html")
+else:
+    with tab1:
+        st.markdown('''
+<div style="height:500px;display:flex;flex-direction:column;align-items:center;justify-content:center;">
+    <svg width="120" height="120" viewBox="0 0 120 120" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <circle cx="60" cy="60" r="56" fill="#E3F2FD" stroke="#90CAF9" stroke-width="4"/>
+        <rect x="35" y="50" width="50" height="30" rx="6" fill="#fff" stroke="#90CAF9" stroke-width="2"/>
+        <rect x="45" y="60" width="30" height="6" rx="3" fill="#BBDEFB"/>
+        <circle cx="60" cy="65" r="2.5" fill="#90CAF9"/>
+        <rect x="55" y="72" width="10" height="3" rx="1.5" fill="#E3F2FD"/>
+        <ellipse cx="60" cy="95" rx="18" ry="4" fill="#E3F2FD"/>
+    </svg>
+    <div style="margin-top:18px;font-size:1.18em;color:#1976d2;font-weight:500;letter-spacing:0.01em;text-align:center;">
+        <span style="font-size:1.5em;">Start your creative journey!</span><br/>
+        <span style="color:#78909c;font-size:1em;">Describe your dream website below and watch it come to life.</span>
+    </div>
+</div>
+''', unsafe_allow_html=True)
+    with tab2:
+        st.code("<!-- No code generated yet -->", language="html")
+st.markdown('</div>', unsafe_allow_html=True)  # close tab-content-scroll
+st.markdown('</div>', unsafe_allow_html=True)  # close main-scroll-area
+
 
 # --- FOOTER WITH CHAT INPUT ---
-st.markdown('<div class="app-footer">', unsafe_allow_html=True)
-chat_input = st.chat_input("Describe the website you want to create...")
-if chat_input:
-    st.session_state.messages.append({"role": "user", "content": chat_input})
-    st.session_state.is_generating = True
-    st.rerun()
-st.markdown('</div>', unsafe_allow_html=True)
+
+# --- Chat input (always at the bottom) ---
+if st.session_state.is_generating:
+    # Disabled input look
+    st.chat_input("Generating... Please wait.", disabled=True)
+else:
+    chat_input = st.chat_input("Describe the website you want to create...")
+    if chat_input:
+        st.session_state.messages.append({"role": "user", "content": chat_input})
+        st.session_state.is_generating = True
+        st.rerun()
+
 
 # --- GENERATION STATUS INDICATOR ---
-if st.session_state.is_generating:
-    st.markdown("""
-    <div class="status-indicator">
-        <span>✨ Generating your website...</span>
-    </div>
-    """, unsafe_allow_html=True)
 
-# Close app frame
-st.markdown('</div>', unsafe_allow_html=True)
 
 # --- PROCESS GENERATION (After UI is rendered) ---
 if st.session_state.is_generating:
-    # Prepare and make API call
-    messages = [{"role": m["role"], "content": m["content"]} for m in st.session_state.messages]
+    # Token-efficient prompt: always include latest preview code and most recent user message
+    messages = []
+    # Add the latest preview code if it exists
+    if st.session_state.last_app_code:
+        messages.append({
+            "role": "assistant",
+            "content": f"Here is the current version of the website code:\n\n{st.session_state.last_app_code.strip()}"
+        })
+    # Add only the most recent user message
+    if st.session_state.messages:
+        # Find the last user message
+        for m in reversed(st.session_state.messages):
+            if m["role"] == "user":
+                messages.append({"role": "user", "content": m["content"]})
+                break
     output = call_gemini(messages)
 
     # Update session state with results

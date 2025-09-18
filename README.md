@@ -8,17 +8,16 @@ A sleek, minimalist web application builder powered by Google Gemini AI. Create 
 
 ## Features
 
-- 🔍 **Minimalist Design** - Clean, distraction-free interface
-- 📱 **Responsive Web App Generation** - Websites work across all devices
-- 💬 **Simple Chat Interface** - Describe your website idea in plain language
-- 🧠 **Google Gemini AI Integration** - Advanced AI generates high-quality code
-- 🔄 **Instant Preview** - See your website immediately
-- 📝 **Code View** - Examine and download the generated HTML/CSS/JS
-- 📦 **No Dependencies** - Pure HTML/CSS/JS outputs with no frameworks
+- 🔍 **Minimalist Design** — Clean, distraction-free interface
+- 📱 **Responsive Web App Generation** — Websites work across all devices
+- 💬 **Simple Chat Interface** — Describe your website idea in plain language
+- 🧠 **Google Gemini AI Integration** — Advanced AI generates high-quality code
+- 🔄 **Instant Preview** — See your website immediately, with a full-height preview area
+- 📝 **Code View** — Examine and download the generated HTML/CSS/JS
+- ✨ **Modern Loader Overlay** — Animated spinner and blurred preview while generating
+- � **Input Lock During Generation** — Chat input is disabled while your site is being built
+- �📦 **No Dependencies** — Pure HTML/CSS/JS outputs with no frameworks
 
-## Screenshots
-
-*(Screenshots would appear here)*
 
 ## Setup
 
@@ -55,9 +54,9 @@ A sleek, minimalist web application builder powered by Google Gemini AI. Create 
    - "Create a landing page for a coffee shop with a hero section, menu, and contact form"
    - "Build a personal portfolio website with projects section and about me"
    - "Design a minimal blog homepage with featured posts"
-3. Click enter and wait for Gemini AI to generate your website
-4. Preview your website in the main area
-5. Use the "View Code" button to see the HTML/CSS/JS
+3. Press enter. While your site is being generated, the preview area will blur and a modern animated loader will appear above it. The chat input is disabled until generation is complete.
+4. Preview your website in the main area (full height up to the chat input)
+5. Use the "View Code" tab to see the HTML/CSS/JS
 6. Download the HTML file to use anywhere
 
 ## How It Works
@@ -65,8 +64,9 @@ A sleek, minimalist web application builder powered by Google Gemini AI. Create 
 1. The application uses the Streamlit framework for the user interface
 2. When you enter a prompt, it's sent to Google's Gemini AI
 3. Gemini generates complete HTML, CSS, and JavaScript code
-4. The code is rendered directly in the browser for immediate preview
-5. You can view and download the source code
+4. While generating, the preview area is blurred and a loader overlay is shown
+5. The code is rendered directly in the browser for immediate preview (full height)
+6. You can view and download the source code
 
 ## Technologies
 
