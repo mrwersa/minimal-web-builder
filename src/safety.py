@@ -31,6 +31,15 @@ def _remove_external_script_tags(html: str) -> tuple[str, bool]:
     return updated, count > 0
 
 
+def _remove_empty_script_tags(html: str) -> tuple[str, bool]:
+    empty_script_pattern = re.compile(
+        r"<script\b(?![^>]*\bsrc\s*=)[^>]*>\s*(?:<!--.*?-->\s*)?</script\s*>",
+        re.IGNORECASE | re.DOTALL,
+    )
+    updated, count = empty_script_pattern.subn("", html)
+    return updated, count > 0
+
+
 def _remove_event_handler_attributes(html: str) -> tuple[str, bool]:
     event_attr_pattern = re.compile(
         r"\s+on[a-zA-Z0-9_:-]+\s*=\s*(\"[^\"]*\"|'[^']*'|[^\s>]+)",
@@ -71,6 +80,10 @@ def apply_output_safety_policy(generated_html: str) -> tuple[str, list[str]]:
     sanitized, removed_external_scripts = _remove_external_script_tags(sanitized)
     if removed_external_scripts:
         alerts.append("Removed external script tags (script src=...).")
+
+    sanitized, removed_empty_scripts = _remove_empty_script_tags(sanitized)
+    if removed_empty_scripts:
+        alerts.append("Removed empty script blocks.")
 
     sanitized, removed_events = _remove_event_handler_attributes(sanitized)
     if removed_events:

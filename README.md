@@ -20,6 +20,7 @@ A sleek, minimalist web application builder powered by Google Gemini AI. Create 
 - Iterative refinement: prior instructions are preserved so follow-up prompts build on the original request
 - Section-level regeneration: pick any top-level section (hero, cards, footer) and regenerate just that block
 - Refine mode: focus a section update on spacing, typography, layout, or color only
+- Safety rails: empty inline scripts are stripped and generated JS is audited for complexity and unsafe calls
 - Visible keyboard focus-state verification in generated templates
 - Export options: single `index.html` or split `index.html` + `styles.css` + `app.js`
 - Template memory: save the current page as a local template and reuse it to seed new generations
