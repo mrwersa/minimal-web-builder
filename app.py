@@ -1,7 +1,6 @@
 from pathlib import Path
 
 import streamlit as st
-import streamlit.components.v1 as components
 
 from src.a11y import audit_generated_html
 from src.config import OPENROUTER_PROVIDER, load_config
@@ -38,7 +37,6 @@ from src.rendering import (
     NO_CODE_PLACEHOLDER,
     PREVIEW_LOADER_OVERLAY_HTML,
     build_app_styles,
-    build_sandboxed_preview_html,
     preview_container_class,
 )
 from src.safety import apply_output_safety_policy
@@ -74,6 +72,15 @@ from src.theme import (
     tone_options,
 )
 from src.validation import validate_user_prompt
+from src.wysiwyg import (
+    build_editable_preview_document,
+    consume_edit_message,
+    register_component,
+    wysiwyg_preview,
+)
+
+# Register the WYSIWYG preview component with Streamlit's server at startup.
+register_component()
 
 # --- PAGE CONFIG ---
 st.set_page_config(
@@ -225,6 +232,12 @@ with st.sidebar:
         and not st.session_state.is_generating
         and not st.session_state.is_regenerating_section
     ):
+        st.toggle(
+            "WYSIWYG editing",
+            key="wysiwyg_editing",
+            help="Turn on click-to-edit in the preview: select an element, edit text,"
+            " restyle it, then Apply to sync changes into the page.",
+        )
         sections = extract_sections(
             strip_html_code_fence(st.session_state.last_app_code)
         )
@@ -311,24 +324,31 @@ st.markdown(build_app_styles(), unsafe_allow_html=True)
 # CONTENT AREA - Either empty state or generated preview
 
 # --- TABS: Preview | Code ---
-
-# --- Custom layout for sticky tabs and fixed chat input ---
 tab_labels = ["Preview", "Code"]
 tab1, tab2 = st.tabs(tab_labels)
-st.markdown('<div class="main-scroll-area">', unsafe_allow_html=True)
-st.markdown('<div class="sticky-tabs">', unsafe_allow_html=True)
-st.markdown("</div>", unsafe_allow_html=True)
-st.markdown('<div class="tab-content-scroll">', unsafe_allow_html=True)
 if st.session_state.last_app_code:
     preview_code = strip_html_code_fence(st.session_state.last_app_code)
-    sandboxed_preview_html = build_sandboxed_preview_html(preview_code)
     with tab1:
         container_class = preview_container_class(st.session_state.is_generating)
         st.markdown(
-            f'<div class="{container_class}" style="position:relative;min-height:0;flex:1;">',
+            f'<div class="{container_class}" style="position:relative;">',
             unsafe_allow_html=True,
         )
-        components.html(sandboxed_preview_html, height=500, scrolling=False)
+        editing = bool(st.session_state.wysiwyg_editing) and not (
+            st.session_state.is_generating or st.session_state.is_regenerating_section
+        )
+        preview_document = build_editable_preview_document(
+            preview_code, editing=editing
+        )
+        edit_message = wysiwyg_preview(
+            html=preview_document,
+            editing=editing,
+            height=800,
+            key="wysiwyg_preview",
+        )
+        if edit_message and consume_edit_message(st.session_state, edit_message):
+            st.toast("WYSIWYG edits applied")
+            st.rerun()
         if st.session_state.is_generating or st.session_state.is_regenerating_section:
             st.markdown(PREVIEW_LOADER_OVERLAY_HTML, unsafe_allow_html=True)
         st.markdown("</div>", unsafe_allow_html=True)
@@ -425,8 +445,6 @@ else:
         st.markdown(EMPTY_STATE_HTML, unsafe_allow_html=True)
     with tab2:
         st.code(NO_CODE_PLACEHOLDER, language="html")
-st.markdown("</div>", unsafe_allow_html=True)  # close tab-content-scroll
-st.markdown("</div>", unsafe_allow_html=True)  # close main-scroll-area
 
 
 # --- FOOTER WITH CHAT INPUT ---

@@ -19,6 +19,8 @@ def init_session_state(state: MutableMapping[str, Any]) -> None:
     state.setdefault("strict_minimal_mode", False)
     state.setdefault("generation_complexity", DEFAULT_COMPLEXITY_KEY)
     state.setdefault("layout_dna_guidance", "")
+    state.setdefault("wysiwyg_editing", False)
+    state.setdefault("last_edit_nonce", 0)
 
 
 def add_user_message_and_start_generation(
