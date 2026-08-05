@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+import json
 import re
 import time
+import urllib.request
 from typing import Any
 
+from src.config import DEFAULT_OPENROUTER_BASE_URL, OPENROUTER_PROVIDER
 from src.observability import GenerationEvent, record
 from src.sections import PageSection
 from src.theme import (
@@ -16,6 +19,8 @@ from src.theme import (
 )
 
 _LANGUAGE_FENCE_RE = re.compile(r"^[A-Za-z][A-Za-z0-9+#.-]*$")
+
+_OPENROUTER_TIMEOUT_SECONDS = 120
 
 BASE_PROMPT = (
     "You are an expert web app developer and UI designer specializing in minimalist, clean designs.\n"
@@ -183,6 +188,99 @@ def _generate_content(
     return text
 
 
+def _generate_content_openrouter(
+    prompt: str,
+    temperature: float,
+    max_output_tokens: int,
+    *,
+    api_key: str,
+    model: str,
+    base_url: str = DEFAULT_OPENROUTER_BASE_URL,
+    analytics_file: str | None = None,
+    event_meta: dict[str, str | bool | None] | None = None,
+) -> str:
+    """Generate via OpenRouter's OpenAI-compatible chat completions endpoint."""
+    meta = dict(event_meta or {})
+    start = time.perf_counter()
+    payload = {
+        "model": model,
+        "messages": [{"role": "user", "content": prompt}],
+        "temperature": temperature,
+        "max_tokens": max_output_tokens,
+    }
+    request = urllib.request.Request(
+        url=f"{base_url.rstrip('/')}/chat/completions",
+        data=json.dumps(payload).encode("utf-8"),
+        headers={
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json",
+        },
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(
+            request, timeout=_OPENROUTER_TIMEOUT_SECONDS
+        ) as response:
+            body = json.loads(response.read().decode("utf-8"))
+        text = body["choices"][0]["message"]["content"]
+    except Exception as exc:  # noqa: BLE001 - surface any provider error as a friendly message
+        record(
+            GenerationEvent(
+                event="generation.error",
+                duration_ms=int((time.perf_counter() - start) * 1000),
+                error=str(exc),
+                **meta,
+            ),
+            analytics_file=analytics_file,
+        )
+        return f"API error: {exc}"
+    record(
+        GenerationEvent(
+            event="generation.success",
+            duration_ms=int((time.perf_counter() - start) * 1000),
+            output_chars=len(text),
+            **meta,
+        ),
+        analytics_file=analytics_file,
+    )
+    return text
+
+
+def _generate(
+    provider: str,
+    prompt: str,
+    temperature: float,
+    max_output_tokens: int,
+    *,
+    model: Any,
+    genai: Any,
+    api_key: str,
+    base_url: str,
+    analytics_file: str | None,
+    event_meta: dict[str, str | bool | None] | None,
+) -> str:
+    if provider == OPENROUTER_PROVIDER:
+        return _generate_content_openrouter(
+            prompt,
+            temperature,
+            max_output_tokens,
+            api_key=api_key,
+            model=str(model),
+            base_url=base_url,
+            analytics_file=analytics_file,
+            event_meta=event_meta,
+        )
+    return _generate_content(
+        model,
+        genai,
+        prompt,
+        temperature,
+        max_output_tokens,
+        analytics_file=analytics_file,
+        event_meta=event_meta,
+    )
+
+
 def call_gemini(
     model: Any,
     genai: Any,
@@ -194,6 +292,10 @@ def call_gemini(
     complexity_key: str = DEFAULT_COMPLEXITY_KEY,
     extra_guidance: str = "",
     analytics_file: str | None = None,
+    *,
+    provider: str = "gemini",
+    api_key: str = "",
+    base_url: str = DEFAULT_OPENROUTER_BASE_URL,
 ) -> str:
     prompt = build_generation_prompt(
         messages,
@@ -202,17 +304,21 @@ def call_gemini(
         complexity_key=complexity_key,
         extra_guidance=extra_guidance,
     )
-    return _generate_content(
-        model,
-        genai,
+    return _generate(
+        provider,
         prompt,
         temperature,
         max_output_tokens,
+        model=model,
+        genai=genai,
+        api_key=api_key,
+        base_url=base_url,
         analytics_file=analytics_file,
         event_meta={
             "tone_key": tone_key,
             "complexity_key": complexity_key,
             "strict_minimal": strict_minimal,
+            "provider": provider,
         },
     )
 
@@ -231,6 +337,10 @@ def call_gemini_for_section(
     extra_guidance: str = "",
     analytics_file: str | None = None,
     refine_aspect_key: str | None = None,
+    *,
+    provider: str = "gemini",
+    api_key: str = "",
+    base_url: str = DEFAULT_OPENROUTER_BASE_URL,
 ) -> str:
     prompt = build_section_regeneration_prompt(
         current_code,
@@ -242,16 +352,20 @@ def call_gemini_for_section(
         extra_guidance=extra_guidance,
         refine_aspect_key=refine_aspect_key,
     )
-    return _generate_content(
-        model,
-        genai,
+    return _generate(
+        provider,
         prompt,
         temperature,
         max_output_tokens,
+        model=model,
+        genai=genai,
+        api_key=api_key,
+        base_url=base_url,
         analytics_file=analytics_file,
         event_meta={
             "tone_key": tone_key,
             "complexity_key": complexity_key,
             "strict_minimal": strict_minimal,
+            "provider": provider,
         },
     )

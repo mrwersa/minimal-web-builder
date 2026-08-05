@@ -18,6 +18,7 @@ class GenerationEvent:
     tone_key: str | None = None
     complexity_key: str | None = None
     strict_minimal: bool | None = None
+    provider: str | None = None
     error: str | None = None
     timestamp: float = field(default_factory=time.time)
 

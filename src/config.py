@@ -5,6 +5,11 @@ from dataclasses import dataclass
 
 from dotenv import load_dotenv
 
+GEMINI_PROVIDER = "gemini"
+OPENROUTER_PROVIDER = "openrouter"
+DEFAULT_OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
+DEFAULT_OPENROUTER_MODEL = "google/gemini-2.0-flash"
+
 
 @dataclass(frozen=True)
 class AppConfig:
@@ -14,6 +19,10 @@ class AppConfig:
     max_output_tokens: int
     max_prompt_chars: int
     analytics_file: str | None = None
+    provider: str = GEMINI_PROVIDER
+    openrouter_api_key: str | None = None
+    openrouter_model: str = DEFAULT_OPENROUTER_MODEL
+    openrouter_base_url: str = DEFAULT_OPENROUTER_BASE_URL
 
 
 def _float_env(name: str, default: float) -> float:
@@ -36,13 +45,26 @@ def _int_env(name: str, default: int) -> int:
         return default
 
 
+def _str_env(name: str, default: str = "") -> str:
+    return os.getenv(name, default).strip()
+
+
 def load_config() -> AppConfig:
     load_dotenv()
+    provider = _str_env("GENERATION_PROVIDER", GEMINI_PROVIDER).lower()
+    if provider not in (GEMINI_PROVIDER, OPENROUTER_PROVIDER):
+        provider = GEMINI_PROVIDER
     return AppConfig(
-        api_key=os.getenv("GEMINI_API_KEY", ""),
-        model=os.getenv("GEMINI_MODEL", "gemini-1.5-flash"),
+        api_key=_str_env("GEMINI_API_KEY"),
+        model=_str_env("GEMINI_MODEL", "gemini-1.5-flash"),
         temperature=_float_env("GEMINI_TEMPERATURE", 0.2),
         max_output_tokens=_int_env("GEMINI_MAX_OUTPUT_TOKENS", 1500),
         max_prompt_chars=_int_env("GEMINI_MAX_PROMPT_CHARS", 1200),
         analytics_file=os.getenv("ANALYTICS_FILE") or None,
+        provider=provider,
+        openrouter_api_key=_str_env("OPENROUTER_API_KEY") or None,
+        openrouter_model=_str_env("OPENROUTER_MODEL", DEFAULT_OPENROUTER_MODEL),
+        openrouter_base_url=_str_env(
+            "OPENROUTER_BASE_URL", DEFAULT_OPENROUTER_BASE_URL
+        ),
     )
