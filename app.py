@@ -1,10 +1,7 @@
-import os
-from dotenv import load_dotenv
 import streamlit as st
 import streamlit.components.v1 as components
-
-# Load .env file
-load_dotenv()
+from src.config import load_config
+from src.generation import call_gemini, strip_html_code_fence
 
 try:
     import google.generativeai as genai
@@ -32,10 +29,11 @@ if "show_preview" not in st.session_state:
     st.session_state.show_preview = True
 
 # --- API CONFIGURATION ---
-api_key = os.getenv("GEMINI_API_KEY", "")
-model = "gemini-1.5-flash"
-temperature = 0.2
-max_output_tokens = 1500
+config = load_config()
+api_key = config.api_key
+model = config.model
+temperature = config.temperature
+max_output_tokens = config.max_output_tokens
 
 if not api_key:
     st.warning("Please provide your Gemini API key in the .env file to start.")
@@ -44,38 +42,6 @@ if not api_key:
 # Configure Gemini
 genai.configure(api_key=api_key)
 gemini_model = genai.GenerativeModel(model)
-
-# --- HELPER FUNCTION ---
-def call_gemini(messages):
-    try:
-        conversation = "\n".join([f"{m['role'].upper()}: {m['content']}" for m in messages])
-        prompt = (
-            "You are an expert web app developer and UI designer specializing in minimalist, clean designs.\n"
-            "Your task: Generate a beautiful, modern, and minimalistic single-page web app using only HTML, CSS, and minimal JavaScript.\n"
-            "Requirements:\n"
-            "- Create a MINIMALIST design with clean typography, ample whitespace, and subtle effects\n"
-            "- Use best practices for accessibility, responsiveness, and performance\n"
-            "- Focus on simplicity, readability and usability\n"
-            "- Use modern CSS (Flexbox/Grid) but keep visual elements minimal\n"
-            "- Avoid unnecessary frameworks, libraries, or decorative elements\n"
-            "- Use a monochromatic or limited color palette\n"
-            "- ALL images/icons must be inline SVG (no external images or links)\n"
-            "- The HTML must be fully self-contained with NO external dependencies or CDN links\n"
-            "- If you generate navigation or tabs, do NOT use anchor links or change the URL. Use JavaScript to show/hide content sections for tab navigation. All navigation must be fully client-side and must not reload or redirect the page.\n"
-            "- Return ONLY the complete HTML/CSS/JS code block, no explanations\n"
-            "- The code should be ready to copy-paste and run\n\n"
-            f"Conversation:\n{conversation}"
-        )
-        response = gemini_model.generate_content(
-            prompt,
-            generation_config=genai.types.GenerationConfig(
-                temperature=temperature,
-                max_output_tokens=max_output_tokens,
-            ),
-        )
-        return response.text
-    except Exception as e:
-        return f"API error: {e}"
 
 # --- FIRST REMOVE STREAMLIT DEFAULTS ---
 # This must come first to properly hide the default components
@@ -279,11 +245,7 @@ st.markdown('<div class="sticky-tabs">', unsafe_allow_html=True)
 st.markdown('</div>', unsafe_allow_html=True)
 st.markdown('<div class="tab-content-scroll">', unsafe_allow_html=True)
 if st.session_state.last_app_code:
-    preview_code = st.session_state.last_app_code
-    if preview_code.strip().startswith("```html"):
-        preview_code = preview_code.strip()[7:]
-        if preview_code.endswith("```"):
-            preview_code = preview_code[:-3]
+    preview_code = strip_html_code_fence(st.session_state.last_app_code)
     with tab1:
         container_class = "preview-container"
         if st.session_state.is_generating:
@@ -393,7 +355,13 @@ if st.session_state.is_generating:
             if m["role"] == "user":
                 messages.append({"role": "user", "content": m["content"]})
                 break
-    output = call_gemini(messages)
+    output = call_gemini(
+        model=gemini_model,
+        genai=genai,
+        messages=messages,
+        temperature=temperature,
+        max_output_tokens=max_output_tokens,
+    )
 
     # Update session state with results
     st.session_state.messages.append({"role": "assistant", "content": "Your minimalist website has been generated!"})

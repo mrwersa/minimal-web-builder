@@ -1,0 +1,26 @@
+from src.config import load_config
+
+
+def test_load_config_reads_overrides(monkeypatch) -> None:
+    monkeypatch.setenv("GEMINI_API_KEY", "k-test")
+    monkeypatch.setenv("GEMINI_MODEL", "gemini-2.5-flash")
+    monkeypatch.setenv("GEMINI_TEMPERATURE", "0.35")
+    monkeypatch.setenv("GEMINI_MAX_OUTPUT_TOKENS", "2048")
+
+    cfg = load_config()
+
+    assert cfg.api_key == "k-test"
+    assert cfg.model == "gemini-2.5-flash"
+    assert cfg.temperature == 0.35
+    assert cfg.max_output_tokens == 2048
+
+
+def test_load_config_falls_back_on_invalid_numeric(monkeypatch) -> None:
+    monkeypatch.setenv("GEMINI_API_KEY", "k-test")
+    monkeypatch.setenv("GEMINI_TEMPERATURE", "not-a-float")
+    monkeypatch.setenv("GEMINI_MAX_OUTPUT_TOKENS", "not-an-int")
+
+    cfg = load_config()
+
+    assert cfg.temperature == 0.2
+    assert cfg.max_output_tokens == 1500
