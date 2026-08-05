@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import streamlit as st
 import streamlit.components.v1 as components
 
@@ -8,6 +10,12 @@ from src.generation import (
     call_gemini,
     call_gemini_for_section,
     strip_html_code_fence,
+)
+from src.profiles import (
+    CUSTOM_PROFILE_ID,
+    get_profile,
+    load_profiles,
+    profile_options,
 )
 from src.rendering import (
     EMPTY_STATE_HTML,
@@ -78,14 +86,38 @@ if not api_key:
 genai.configure(api_key=api_key)
 gemini_model = genai.GenerativeModel(model)
 
+# --- GENERATION PROFILES ---
+PROFILES_DIR = Path(__file__).resolve().parent / "profiles"
+try:
+    PROFILES = load_profiles(PROFILES_DIR)
+except (ValueError, TypeError) as exc:
+    st.error(f"Failed to load generation profiles: {exc}")
+    PROFILES = []
+
 # --- GENERATION OPTIONS (SIDEBAR) ---
 with st.sidebar:
     st.markdown("#### Generation options")
+    profile_key = st.selectbox(
+        "Profile",
+        options=profile_options(PROFILES),
+        format_func=lambda key: (
+            "Custom (manual controls)"
+            if key == CUSTOM_PROFILE_ID
+            else get_profile(PROFILES, key).label
+        ),
+        key="generation_profile",
+    )
+    active_profile = get_profile(PROFILES, profile_key)
+    profile_active = active_profile is not None
+    if profile_active:
+        st.caption(active_profile.description)
+
     st.selectbox(
         "Tone",
         options=tone_options(),
         format_func=lambda key: TONE_PRESETS_BY_KEY[key].label,
         key="generation_tone",
+        disabled=profile_active,
     )
     st.select_slider(
         "Complexity",
@@ -94,14 +126,26 @@ with st.sidebar:
         value=complexity_options().index(st.session_state.generation_complexity) + 1,
         key="generation_complexity_slider",
         help="How much the generated page should include. Compact = minimal; Detailed = richer.",
+        disabled=profile_active,
     )
     st.session_state.generation_complexity = complexity_options()[
         st.session_state.generation_complexity_slider - 1
     ]
-    st.toggle("Strict minimal mode", key="strict_minimal_mode")
+    st.toggle("Strict minimal mode", key="strict_minimal_mode", disabled=profile_active)
     st.caption(
         "Strict minimal mode restricts output to flat, monochrome, decoration-free designs."
     )
+
+    if profile_active:
+        effective_tone = active_profile.tone_key
+        effective_complexity = active_profile.complexity_key
+        effective_strict = active_profile.strict_minimal
+        effective_guidance = active_profile.extra_guidance
+    else:
+        effective_tone = st.session_state.generation_tone
+        effective_complexity = st.session_state.generation_complexity
+        effective_strict = st.session_state.strict_minimal_mode
+        effective_guidance = ""
 
     st.markdown("#### Refine")
     if (
@@ -262,9 +306,10 @@ if st.session_state.is_regenerating_section:
         instructions=last_user_message(st.session_state),
         temperature=temperature,
         max_output_tokens=max_output_tokens,
-        tone_key=st.session_state.generation_tone,
-        strict_minimal=st.session_state.strict_minimal_mode,
-        complexity_key=st.session_state.generation_complexity,
+        tone_key=effective_tone,
+        strict_minimal=effective_strict,
+        complexity_key=effective_complexity,
+        extra_guidance=effective_guidance,
     )
 
     if output.startswith("API error:"):
@@ -300,9 +345,10 @@ if st.session_state.is_generating:
         messages=messages,
         temperature=temperature,
         max_output_tokens=max_output_tokens,
-        tone_key=st.session_state.generation_tone,
-        strict_minimal=st.session_state.strict_minimal_mode,
-        complexity_key=st.session_state.generation_complexity,
+        tone_key=effective_tone,
+        strict_minimal=effective_strict,
+        complexity_key=effective_complexity,
+        extra_guidance=effective_guidance,
     )
 
     if output.startswith("API error:"):

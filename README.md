@@ -13,6 +13,7 @@ A sleek, minimalist web application builder powered by Google Gemini AI. Create 
 - Prompt-driven chat workflow
 - Gemini-powered HTML/CSS/JS generation
 - Tone presets (minimal, editorial, product, portfolio, landing)
+- Generation profiles (Minimal, Startup Landing, Portfolio) that bundle tone, complexity, and guidance
 - Output complexity control (compact / balanced / detailed)
 - Optional strict minimal mode for flat, monochrome designs
 - Accessibility guardrails in generation + static audit of generated HTML
@@ -56,7 +57,7 @@ A sleek, minimalist web application builder powered by Google Gemini AI. Create 
 ## Usage
 
 1. Once the app is running, you'll see a clean interface with a chat input at the bottom.
-2. Open the sidebar to pick a tone preset (minimal, editorial, product, portfolio, landing), choose an output complexity (compact, balanced, detailed), or toggle strict minimal mode. These apply to the next generation.
+2. Open the sidebar to pick a generation **Profile** (Minimal, Startup Landing, Portfolio) or keep **Custom** to set tone, complexity, and strict minimal mode individually. Profile selection disables the manual controls and applies the profile's settings to the next generation.
 3. Type a description of the website you want to create, for example:
    - "Create a landing page for a coffee shop with a hero section, menu, and contact form"
    - "Build a personal portfolio website with projects section and about me"

@@ -1,0 +1,8 @@
+{
+  "label": "Minimal",
+  "description": "Strict flat, monochrome, ultra-minimal page with the fewest sections.",
+  "tone_key": "minimal",
+  "complexity_key": "compact",
+  "strict_minimal": true,
+  "extra_guidance": "Restrict the page to at most three sections: a header, a single main content block, and a footer. No decorative flourishes."
+}
