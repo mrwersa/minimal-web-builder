@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import time
 from typing import Any
 
+from src.observability import GenerationEvent, record
 from src.sections import PageSection
 from src.theme import (
     COMPLEXITY_BY_KEY,
@@ -130,7 +132,11 @@ def _generate_content(
     prompt: str,
     temperature: float,
     max_output_tokens: int,
+    analytics_file: str | None = None,
+    event_meta: dict[str, str | bool | None] | None = None,
 ) -> str:
+    meta = dict(event_meta or {})
+    start = time.perf_counter()
     try:
         response = model.generate_content(
             prompt,
@@ -139,9 +145,28 @@ def _generate_content(
                 max_output_tokens=max_output_tokens,
             ),
         )
-        return response.text
+        text = response.text
     except Exception as exc:  # noqa: BLE001 - surface any provider error as a friendly message
+        record(
+            GenerationEvent(
+                event="generation.error",
+                duration_ms=int((time.perf_counter() - start) * 1000),
+                error=str(exc),
+                **meta,
+            ),
+            analytics_file=analytics_file,
+        )
         return f"API error: {exc}"
+    record(
+        GenerationEvent(
+            event="generation.success",
+            duration_ms=int((time.perf_counter() - start) * 1000),
+            output_chars=len(text),
+            **meta,
+        ),
+        analytics_file=analytics_file,
+    )
+    return text
 
 
 def call_gemini(
@@ -154,6 +179,7 @@ def call_gemini(
     strict_minimal: bool = False,
     complexity_key: str = DEFAULT_COMPLEXITY_KEY,
     extra_guidance: str = "",
+    analytics_file: str | None = None,
 ) -> str:
     prompt = build_generation_prompt(
         messages,
@@ -162,7 +188,19 @@ def call_gemini(
         complexity_key=complexity_key,
         extra_guidance=extra_guidance,
     )
-    return _generate_content(model, genai, prompt, temperature, max_output_tokens)
+    return _generate_content(
+        model,
+        genai,
+        prompt,
+        temperature,
+        max_output_tokens,
+        analytics_file=analytics_file,
+        event_meta={
+            "tone_key": tone_key,
+            "complexity_key": complexity_key,
+            "strict_minimal": strict_minimal,
+        },
+    )
 
 
 def call_gemini_for_section(
@@ -177,6 +215,7 @@ def call_gemini_for_section(
     strict_minimal: bool = False,
     complexity_key: str = DEFAULT_COMPLEXITY_KEY,
     extra_guidance: str = "",
+    analytics_file: str | None = None,
 ) -> str:
     prompt = build_section_regeneration_prompt(
         current_code,
@@ -187,4 +226,16 @@ def call_gemini_for_section(
         complexity_key=complexity_key,
         extra_guidance=extra_guidance,
     )
-    return _generate_content(model, genai, prompt, temperature, max_output_tokens)
+    return _generate_content(
+        model,
+        genai,
+        prompt,
+        temperature,
+        max_output_tokens,
+        analytics_file=analytics_file,
+        event_meta={
+            "tone_key": tone_key,
+            "complexity_key": complexity_key,
+            "strict_minimal": strict_minimal,
+        },
+    )

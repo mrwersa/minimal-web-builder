@@ -363,6 +363,7 @@ if st.session_state.is_regenerating_section:
         strict_minimal=effective_strict,
         complexity_key=effective_complexity,
         extra_guidance=effective_guidance,
+        analytics_file=config.analytics_file,
     )
 
     if output.startswith("API error:"):
@@ -402,6 +403,7 @@ if st.session_state.is_generating:
         strict_minimal=effective_strict,
         complexity_key=effective_complexity,
         extra_guidance=effective_guidance,
+        analytics_file=config.analytics_file,
     )
 
     if output.startswith("API error:"):

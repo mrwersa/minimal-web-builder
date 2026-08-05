@@ -28,3 +28,15 @@ def test_load_config_falls_back_on_invalid_numeric(monkeypatch) -> None:
     assert cfg.temperature == 0.2
     assert cfg.max_output_tokens == 1500
     assert cfg.max_prompt_chars == 1200
+
+
+def test_load_config_analytics_file_from_env(monkeypatch) -> None:
+    monkeypatch.setenv("ANALYTICS_FILE", "data/events.jsonl")
+
+    assert load_config().analytics_file == "data/events.jsonl"
+
+
+def test_load_config_analytics_file_defaults_none(monkeypatch) -> None:
+    monkeypatch.delenv("ANALYTICS_FILE", raising=False)
+
+    assert load_config().analytics_file is None
