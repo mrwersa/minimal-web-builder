@@ -3,8 +3,12 @@ from src.state import (
     add_user_message_and_start_generation,
     apply_generation_error,
     apply_generation_result,
+    apply_section_regeneration_error,
+    apply_section_regeneration_result,
     build_generation_messages,
     init_session_state,
+    last_user_message,
+    request_section_regeneration,
 )
 
 
@@ -15,6 +19,8 @@ def test_init_session_state_sets_defaults() -> None:
     assert state["messages"] == []
     assert state["last_app_code"] is None
     assert state["is_generating"] is False
+    assert state["is_regenerating_section"] is False
+    assert state["pending_section_index"] is None
     assert state["show_preview"] is True
     assert state["generation_tone"] == "minimal"
     assert state["strict_minimal_mode"] is False
@@ -84,3 +90,51 @@ def test_generation_error_does_not_override_last_code() -> None:
     assert state["is_generating"] is False
     assert state["last_app_code"] == "<div>stable</div>"
     assert "Generation failed" in state["messages"][-1]["content"]
+
+
+def test_last_user_message_returns_latest_user_input() -> None:
+    state = {
+        "messages": [
+            {"role": "user", "content": "first"},
+            {"role": "assistant", "content": "ok"},
+            {"role": "user", "content": "second"},
+        ]
+    }
+
+    assert last_user_message(state) == "second"
+
+
+def test_last_user_message_empty_without_history() -> None:
+    assert last_user_message({"messages": []}) == ""
+    assert last_user_message({}) == ""
+
+
+def test_section_regeneration_state_transitions() -> None:
+    state = {
+        "is_regenerating_section": False,
+        "pending_section_index": None,
+        "last_app_code": None,
+    }
+
+    request_section_regeneration(state, 2)
+    assert state["is_regenerating_section"] is True
+    assert state["pending_section_index"] == 2
+
+    apply_section_regeneration_result(state, "<html>v2</html>")
+    assert state["is_regenerating_section"] is False
+    assert state["pending_section_index"] is None
+    assert state["last_app_code"] == "<html>v2</html>"
+
+
+def test_section_regeneration_error_resets_state_and_keeps_code() -> None:
+    state = {
+        "is_regenerating_section": True,
+        "pending_section_index": 1,
+        "last_app_code": "<div>keep</div>",
+    }
+
+    apply_section_regeneration_error(state)
+
+    assert state["is_regenerating_section"] is False
+    assert state["pending_section_index"] is None
+    assert state["last_app_code"] == "<div>keep</div>"

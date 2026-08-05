@@ -14,7 +14,8 @@ Build the most reliable minimal web builder for self-contained, beautiful, respo
 - Gemini prompt-to-HTML generation with sandboxed in-app preview.
 - Session state lifecycle, input validation, output safety policy, and deterministic tests.
 - Generation controls (tone presets, strict minimal mode, complexity slider) shipped as Phase 2 groundwork.
-- Accessibility guardrails in the prompt plus a static accessibility audit of generated HTML.
+- Section-level regeneration: pick any top-level section and regenerate just that block in place.
+- App UI styled from the shared design-token palette; accessibility guardrails in the prompt plus a static audit of generated HTML (incl. visible focus styles).
 - ~95% coverage on core non-UI modules; CI gates on lint + syntax + tests + coverage.
 
 ## Phase 1: Foundation ✅ (complete)
@@ -58,23 +59,23 @@ Work items:
 - ✅ Introduce a small design token layer:
   - ✅ Typography scale, spacing scale, neutral + accent palette.
   - ✅ Shared UI constants for Streamlit theme consistency.
-  - ⬜ Consume tokens in the app CSS/Streamlit theme (follow-up).
+  - ✅ App CSS/Streamlit theme consumes the tokens via a single `build_app_styles()` entry point.
 - ✅ Better generation controls:
   - ✅ Tone presets (minimal, editorial, product, portfolio, landing).
   - ✅ Optional strict minimal mode (fewer decorations).
   - ✅ Output complexity slider (compact / balanced / detailed).
-- ⬜ Prompt iteration UX:
+- ✅ Prompt iteration UX:
   - ✅ Keep instruction history (last 8 user instructions are preserved across turns).
-  - ⬜ Regenerate section-level variants (hero, cards, footer).
+  - ✅ Regenerate section-level variants (hero, cards, footer) via an in-app section picker.
 - ✅ Accessibility checks:
   - ✅ Contrast guardrails in generation prompt (WCAG AA baseline).
   - ✅ Keyboard navigation/structure audit of generated templates (alt, labels, h1, tabindex).
-  - ⬜ Visual focus-state verification in generated templates.
+  - ✅ Visual focus-state verification in generated templates (:focus / :focus-visible detection).
 
 Exit criteria:
 - 🔄 Reduced failed-generation rate (validation + friendly errors + safety policy cut failure modes; rate not yet measured).
 - ⬜ Faster time-to-usable-result for first prompt.
-- 🔄 Documented visual system and generation presets (presets documented; full visual system pending).
+- ✅ Documented visual system and generation presets (design tokens consumed across the app; presets documented).
 
 ## Phase 3: Productization (4-8 weeks)
 

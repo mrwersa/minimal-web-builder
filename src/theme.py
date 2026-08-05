@@ -117,6 +117,7 @@ COLORS = {
     "muted": "#78909c",
     "accent": "#1976d2",
     "accent_soft": "#e3f2fd",
+    "disabled": "#b0b8c1",
 }
 
 SPACING = {"xs": 4, "sm": 8, "md": 16, "lg": 24, "xl": 32}

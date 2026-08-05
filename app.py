@@ -3,21 +3,35 @@ import streamlit.components.v1 as components
 
 from src.a11y import audit_generated_html
 from src.config import load_config
-from src.generation import call_gemini, strip_html_code_fence
+from src.generation import (
+    call_gemini,
+    call_gemini_for_section,
+    strip_html_code_fence,
+)
 from src.rendering import (
     EMPTY_STATE_HTML,
     NO_CODE_PLACEHOLDER,
     PREVIEW_LOADER_OVERLAY_HTML,
+    build_app_styles,
     build_sandboxed_preview_html,
     preview_container_class,
 )
 from src.safety import apply_output_safety_policy
+from src.sections import (
+    extract_first_top_level,
+    extract_sections,
+    replace_section,
+)
 from src.state import (
     add_user_message_and_start_generation,
     apply_generation_error,
     apply_generation_result,
+    apply_section_regeneration_error,
+    apply_section_regeneration_result,
     build_generation_messages,
     init_session_state,
+    last_user_message,
+    request_section_regeneration,
 )
 from src.theme import (
     COMPLEXITY_BY_KEY,
@@ -88,188 +102,41 @@ with st.sidebar:
         "Strict minimal mode restricts output to flat, monochrome, decoration-free designs."
     )
 
-# --- FIRST REMOVE STREAMLIT DEFAULTS ---
-# This must come first to properly hide the default components
-st.markdown(
-    """
-<style>
-/* Complete hiding of default Streamlit elements */
-#MainMenu, header, footer {display: none !important;}
-.stDeployButton {display: none !important;}
-[data-testid="stToolbar"] {display: none !important;}
-.viewerBadge_container__1QSob {display: none !important;}
+    st.markdown("#### Refine")
+    if (
+        st.session_state.last_app_code
+        and not st.session_state.is_generating
+        and not st.session_state.is_regenerating_section
+    ):
+        sections = extract_sections(
+            strip_html_code_fence(st.session_state.last_app_code)
+        )
+        if sections:
+            section_labels = [
+                f"{s.index + 1}. <{s.tag}> — {s.snippet}"
+                if s.snippet
+                else f"{s.index + 1}. <{s.tag}>"
+                for s in sections
+            ]
+            st.selectbox(
+                "Regenerate section",
+                options=list(range(len(sections))),
+                format_func=lambda i: section_labels[i],
+                key="section_choice",
+            )
+            if st.button("Regenerate section"):
+                request_section_regeneration(
+                    st.session_state,
+                    st.session_state.section_choice,
+                )
+                st.rerun()
+        else:
+            st.caption("No sections detected in the current page.")
+    else:
+        st.caption("Generate a website first, then refine individual sections.")
 
-/* Remove ALL padding and margins */
-.block-container {
-    padding: 0 !important;
-    margin: 0 !important;
-    max-width: 100% !important;
-}
-
-/* Fix gaps */
-div[data-testid="stVerticalBlock"] {
-    gap: 0 !important;
-}
-
-/* Remove padding from every element */
-section.main, .element-container {
-    padding: 0 !important;
-    margin: 0 !important;
-}
-</style>
-""",
-    unsafe_allow_html=True,
-)
-
-# --- LAYOUT CSS (SEPARATE FROM STREAMLIT DEFAULTS) ---
-st.markdown(
-    """
-<style>
-html, body, .stApp {
-    margin: 0;
-    padding: 0;
-    height: 100vh;
-    overflow-x: hidden;
-    background: #f7f9fb;
-}
-.app-frame {
-    min-height: 100vh;
-    display: flex;
-    flex-direction: column;
-}
-.main-scroll-area {
-    flex: 1 1 auto;
-    display: flex;
-    flex-direction: column;
-    align-items: stretch;
-    justify-content: flex-start;
-    padding: 0;
-    margin: 0;
-    overflow: hidden;
-    position: relative;
-    min-height: 0;
-}
-.sticky-tabs {
-    position: sticky !important;
-    top: 0 !important;
-    z-index: 1002 !important;
-    background: #f7f9fb !important;
-}
-.tab-content-scroll {
-    flex: 1 1 auto;
-    overflow-y: auto;
-    min-height: 0;
-    position: relative;
-    padding-bottom: 24px;
-}
-.stChatInput {
-    position: fixed !important;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    width: 100vw;
-    z-index: 2000;
-    background: #f7f9fb !important;
-    border-top: 1px solid #e9ecef;
-    margin: 0 !important;
-    padding: 0 20px;
-}
-.stChatInput > div {
-    margin: 0 !important;
-    padding: 0 !important;
-    background: #f7f9fb !important;
-    box-shadow: none !important;
-    border-radius: 0 !important;
-}
-.stChatInput input, .stChatInput textarea {
-    color: #222 !important;
-    caret-color: #1976d2 !important;
-    padding: 12px 16px !important;
-    font-size: 1.08em !important;
-    background: #fff !important;
-    border: 1.5px solid #e3e8ee !important;
-    border-radius: 0 !important;
-    box-shadow: none !important;
-    outline: none !important;
-    transition: border-color 0.2s;
-}
-.stChatInput input:focus, .stChatInput textarea:focus {
-    border: 1.5px solid #1976d2 !important;
-    outline: none !important;
-    background: #fff !important;
-}
-.stChatInput input::placeholder, .stChatInput textarea::placeholder {
-    color: #78909c !important;
-    opacity: 1 !important;
-}
-.stChatInput input:disabled, .stChatInput textarea:disabled {
-    background: #f7f9fb !important;
-    color: #b0b8c1 !important;
-}
-.preview-container {
-    width: 100%;
-    flex: 1 1 auto;
-    min-height: 0;
-    height: 100%;
-    display: flex;
-    flex-direction: column;
-    align-items: stretch;
-    justify-content: flex-start;
-}
-.status-indicator {
-    position: absolute;
-    left: 50%;
-    bottom: 80px;
-    transform: translateX(-50%);
-    background: rgba(255,255,255,0.95);
-    padding: 8px 16px;
-    border-radius: 20px;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.15);
-    font-size: 14px;
-    z-index: 1001;
-}
-.stButton, .stDownloadButton {
-    margin: 0 !important;
-}
-iframe {
-    width: 100vw !important;
-    max-width: 100% !important;
-    height: 100% !important;
-    min-height: 0 !important;
-    border: none !important;
-    display: block;
-    overflow: auto !important;
-}
-.stTabs [data-baseweb="tab-list"] {
-    background: #fff;
-    border-radius: 10px 10px 0 0;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.04);
-    border-bottom: 1.5px solid #e3e8ee;
-    padding-left: 12px;
-}
-.stTabs [data-baseweb="tab"] {
-    font-size: 1.08em;
-    font-weight: 500;
-    color: #1976d2;
-    padding: 12px 24px 10px 24px;
-    margin-right: 2px;
-    border-radius: 10px 10px 0 0;
-    background: #f7f9fb;
-    transition: background 0.2s, color 0.2s;
-}
-.stTabs [aria-selected="true"] {
-    background: #1976d2 !important;
-    color: #fff !important;
-    box-shadow: 0 2px 8px rgba(25,118,210,0.08);
-}
-.stTabs [data-baseweb="tab-panel"] {
-    padding-top: 0 !important;
-    margin-top: 0 !important;
-}
-</style>
-""",
-    unsafe_allow_html=True,
-)
+# --- APP STYLES (token-driven, from src/theme) ---
+st.markdown(build_app_styles(), unsafe_allow_html=True)
 
 # --- START APP LAYOUT ---
 
@@ -295,7 +162,7 @@ if st.session_state.last_app_code:
             unsafe_allow_html=True,
         )
         components.html(sandboxed_preview_html, height=500, scrolling=False)
-        if st.session_state.is_generating:
+        if st.session_state.is_generating or st.session_state.is_regenerating_section:
             st.markdown(PREVIEW_LOADER_OVERLAY_HTML, unsafe_allow_html=True)
         st.markdown("</div>", unsafe_allow_html=True)
     with tab2:
@@ -312,7 +179,7 @@ st.markdown("</div>", unsafe_allow_html=True)  # close main-scroll-area
 # --- FOOTER WITH CHAT INPUT ---
 
 # --- Chat input (always at the bottom) ---
-if st.session_state.is_generating:
+if st.session_state.is_generating or st.session_state.is_regenerating_section:
     # Disabled input look
     st.chat_input("Generating... Please wait.", disabled=True)
 else:
@@ -330,6 +197,54 @@ else:
 
 
 # --- GENERATION STATUS INDICATOR ---
+
+
+# --- PROCESS SECTION REGENERATION (After UI is rendered) ---
+if st.session_state.is_regenerating_section:
+    current_code = strip_html_code_fence(st.session_state.last_app_code)
+    sections = extract_sections(current_code)
+    section_index = st.session_state.pending_section_index
+    if section_index is None or section_index >= len(sections):
+        st.error("The selected section is no longer available. Please try again.")
+        apply_section_regeneration_error(st.session_state)
+        st.rerun()
+
+    section = sections[section_index]
+    output = call_gemini_for_section(
+        model=gemini_model,
+        genai=genai,
+        current_code=current_code,
+        section=section,
+        instructions=last_user_message(st.session_state),
+        temperature=temperature,
+        max_output_tokens=max_output_tokens,
+        tone_key=st.session_state.generation_tone,
+        strict_minimal=st.session_state.strict_minimal_mode,
+        complexity_key=st.session_state.generation_complexity,
+    )
+
+    if output.startswith("API error:"):
+        st.error("Section regeneration failed due to an API error. Please try again.")
+        apply_section_regeneration_error(st.session_state)
+        st.rerun()
+
+    sanitized_output, safety_alerts = apply_output_safety_policy(output)
+    if safety_alerts:
+        st.warning("Safety policy applied: " + " ".join(safety_alerts))
+
+    replacement = extract_first_top_level(strip_html_code_fence(sanitized_output))
+    if not replacement:
+        st.error("Could not parse the regenerated section. Please try again.")
+        apply_section_regeneration_error(st.session_state)
+        st.rerun()
+
+    updated_code = replace_section(current_code, section, replacement)
+    a11y_notes = audit_generated_html(updated_code)
+    if a11y_notes:
+        st.info("Accessibility notes: " + " ".join(a11y_notes))
+
+    apply_section_regeneration_result(st.session_state, updated_code)
+    st.rerun()
 
 
 # --- PROCESS GENERATION (After UI is rendered) ---

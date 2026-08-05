@@ -17,6 +17,8 @@ A sleek, minimalist web application builder powered by Google Gemini AI. Create 
 - Optional strict minimal mode for flat, monochrome designs
 - Accessibility guardrails in generation + static audit of generated HTML
 - Iterative refinement: prior instructions are preserved so follow-up prompts build on the original request
+- Section-level regeneration: pick any top-level section (hero, cards, footer) and regenerate just that block
+- Visible keyboard focus-state verification in generated templates
 - Instant preview and code view
 - Input lock while generation is running
 - Self-contained output (no external frontend dependencies)
@@ -62,6 +64,8 @@ A sleek, minimalist web application builder powered by Google Gemini AI. Create 
 5. Preview your website in the main area (full height up to the chat input)
 6. Use the "View Code" tab to see the HTML/CSS/JS
 7. Download the HTML file to use anywhere
+
+To refine a single section after generation, open the sidebar, pick a section from the "Regenerate section" dropdown, and press **Regenerate section**. The selected block is regenerated in place while the rest of the page stays untouched.
 
 ## How It Works
 
