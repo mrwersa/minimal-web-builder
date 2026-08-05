@@ -3,6 +3,7 @@ import streamlit.components.v1 as components
 from src.config import load_config
 from src.generation import call_gemini, strip_html_code_fence
 from src.rendering import (
+    build_sandboxed_preview_html,
     EMPTY_STATE_HTML,
     NO_CODE_PLACEHOLDER,
     PREVIEW_LOADER_OVERLAY_HTML,
@@ -254,10 +255,11 @@ st.markdown('</div>', unsafe_allow_html=True)
 st.markdown('<div class="tab-content-scroll">', unsafe_allow_html=True)
 if st.session_state.last_app_code:
     preview_code = strip_html_code_fence(st.session_state.last_app_code)
+    sandboxed_preview_html = build_sandboxed_preview_html(preview_code)
     with tab1:
         container_class = preview_container_class(st.session_state.is_generating)
         st.markdown(f'<div class="{container_class}" style="position:relative;min-height:0;flex:1;">', unsafe_allow_html=True)
-        components.html(preview_code, height=500, scrolling=False)
+        components.html(sandboxed_preview_html, height=500, scrolling=False)
         if st.session_state.is_generating:
             st.markdown(PREVIEW_LOADER_OVERLAY_HTML, unsafe_allow_html=True)
         st.markdown('</div>', unsafe_allow_html=True)
