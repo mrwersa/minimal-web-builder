@@ -6,6 +6,7 @@ from src.generation import (
     build_generation_prompt,
     build_section_regeneration_prompt,
     call_gemini,
+    call_gemini_for_section,
     strip_html_code_fence,
 )
 from src.sections import PageSection
@@ -43,6 +44,21 @@ def test_strip_html_code_fence_html_block() -> None:
 def test_strip_html_code_fence_generic_block() -> None:
     raw = "```\n<section>Hi</section>\n```"
     assert strip_html_code_fence(raw) == "<section>Hi</section>"
+
+
+def test_strip_html_code_fence_uppercase_language() -> None:
+    raw = "```HTML\n<div>Hello</div>\n```"
+    assert strip_html_code_fence(raw) == "<div>Hello</div>"
+
+
+def test_strip_html_code_fence_other_language_tokens() -> None:
+    for lang in ("python", "html5"):
+        assert strip_html_code_fence(f"```{lang}\n<div>x</div>\n```") == "<div>x</div>"
+
+
+def test_strip_html_code_fence_keeps_first_content_line() -> None:
+    raw = "```\nHello world\n<div>x</div>\n```"
+    assert strip_html_code_fence(raw) == "Hello world\n<div>x</div>"
 
 
 def test_build_generation_prompt_includes_roles_and_content() -> None:
@@ -200,6 +216,84 @@ def test_call_gemini_without_analytics_file_writes_nothing(tmp_path) -> None:
     )
 
     assert not list(tmp_path.iterdir())
+
+
+def test_call_gemini_for_section_returns_model_text() -> None:
+    model = _FakeModel(text="<main>new</main>")
+    out = call_gemini_for_section(
+        model,
+        _FakeGenai(),
+        "<html><body><main>x</main></body></html>",
+        _section(),
+        "tighten it up",
+        temperature=0.2,
+        max_output_tokens=100,
+        refine_aspect_key="color",
+    )
+
+    assert out == "<main>new</main>"
+    assert "tighten it up" in model.last_prompt
+    assert "Section to replace" in model.last_prompt
+    assert "Adjust color only" in model.last_prompt
+
+
+def test_call_gemini_for_section_surfaces_api_error() -> None:
+    out = call_gemini_for_section(
+        _FakeModel(error="boom"),
+        _FakeGenai(),
+        "<main>x</main>",
+        _section(),
+        "fix it",
+        temperature=0.2,
+        max_output_tokens=100,
+    )
+
+    assert out.startswith("API error:")
+    assert "boom" in out
+
+
+def test_call_gemini_for_section_records_success_event(tmp_path) -> None:
+    analytics = tmp_path / "events.jsonl"
+    out = call_gemini_for_section(
+        _FakeModel(text="<main>new</main>"),
+        _FakeGenai(),
+        "<main>x</main>",
+        _section(),
+        "fix it",
+        temperature=0.2,
+        max_output_tokens=100,
+        tone_key="editorial",
+        strict_minimal=True,
+        complexity_key="compact",
+        analytics_file=str(analytics),
+    )
+
+    assert out == "<main>new</main>"
+    payload = json.loads(analytics.read_text(encoding="utf-8").splitlines()[0])
+    assert payload["event"] == "generation.success"
+    assert payload["output_chars"] == len("<main>new</main>")
+    assert payload["tone_key"] == "editorial"
+    assert payload["complexity_key"] == "compact"
+    assert payload["strict_minimal"] is True
+
+
+def test_call_gemini_for_section_records_error_event(tmp_path) -> None:
+    analytics = tmp_path / "events.jsonl"
+    out = call_gemini_for_section(
+        _FakeModel(error="boom"),
+        _FakeGenai(),
+        "<main>x</main>",
+        _section(),
+        "fix it",
+        temperature=0.2,
+        max_output_tokens=100,
+        analytics_file=str(analytics),
+    )
+
+    assert out.startswith("API error:")
+    payload = json.loads(analytics.read_text(encoding="utf-8").splitlines()[0])
+    assert payload["event"] == "generation.error"
+    assert "boom" in payload["error"]
 
 
 def _section() -> PageSection:

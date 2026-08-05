@@ -111,6 +111,16 @@ def test_extract_sections_handles_self_closing_inside_section() -> None:
     assert sections[0].html == "<main><img src='x'/>text</main>"
 
 
+def test_extract_sections_handles_top_level_self_closing_element() -> None:
+    html = "<hr/><main>one</main><br/>"
+    sections = extract_sections(html)
+
+    assert [s.tag for s in sections] == ["hr", "main", "br"]
+    assert sections[0].html == "<hr/>"
+    assert sections[0].snippet == ""
+    assert sections[1].html == "<main>one</main>"
+
+
 def test_extract_first_top_level_skips_wrappers() -> None:
     html = "<html><body><section>one</section><footer>two</footer></body></html>"
     assert extract_first_top_level(html) == "<section>one</section>"

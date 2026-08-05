@@ -92,3 +92,20 @@ def test_split_empty_style_block_is_skipped() -> None:
 def test_split_returns_dataclass() -> None:
     split = split_document(SAMPLE)
     assert isinstance(split, SplitDocument)
+
+
+def test_split_tolerates_self_closing_tags() -> None:
+    html = "<br/><hr/><style>h1{}</style><p>x</p>"
+    split = split_document(html)
+
+    assert "<br/><hr/>" in split.index_html
+    assert "h1{}" in split.styles_css
+
+
+def test_split_ignores_self_closing_style_and_script() -> None:
+    html = "<style/><script/><p>x</p>"
+    split = split_document(html)
+
+    assert split.styles_css == ""
+    assert split.app_js == ""
+    assert "<style/><script/>" in split.index_html

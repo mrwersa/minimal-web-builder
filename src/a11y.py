@@ -54,6 +54,7 @@ class _A11yScanner(HTMLParser):
                 _FormControl(tag, attrs_dict, self._inside_label())
             )
             self._check_tabindex(attrs_dict)
+            self._interactive_count += 1
         elif tag in _INTERACTIVE_TAGS or "tabindex" in attrs_dict:
             self._interactive_count += 1
 
