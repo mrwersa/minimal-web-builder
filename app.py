@@ -5,6 +5,13 @@ import streamlit.components.v1 as components
 
 from src.a11y import audit_generated_html
 from src.config import load_config
+from src.constraints import (
+    COLOR_LIMITS,
+    COLOR_LIMITS_BY_KEY,
+    SECTION_OPTIONS,
+    SECTION_OPTIONS_BY_KEY,
+    build_constraints_prompt,
+)
 from src.export import split_document
 from src.generation import (
     call_gemini,
@@ -148,6 +155,45 @@ with st.sidebar:
     st.caption(
         "Strict minimal mode restricts output to flat, monochrome, decoration-free designs."
     )
+
+    with st.expander("Constraint-first generation"):
+        st.checkbox(
+            "Generate from constraints",
+            key="constraint_mode",
+            help="Build the page from selected sections and limits; the model fills in the details.",
+        )
+        if st.session_state.constraint_mode:
+            st.multiselect(
+                "Sections",
+                options=[s.key for s in SECTION_OPTIONS],
+                format_func=lambda key: SECTION_OPTIONS_BY_KEY[key].label,
+                default=["hero", "features", "footer"],
+                key="constraint_sections",
+            )
+            st.selectbox(
+                "Color limit",
+                options=[c.key for c in COLOR_LIMITS],
+                format_func=lambda key: COLOR_LIMITS_BY_KEY[key].label,
+                key="constraint_color",
+            )
+            st.selectbox(
+                "Density",
+                options=complexity_options(),
+                format_func=lambda key: COMPLEXITY_BY_KEY[key].label,
+                key="constraint_density",
+            )
+            if st.button(
+                "Generate from constraints",
+                disabled=st.session_state.is_generating,
+                help="Sends the constraints as the generation prompt.",
+            ):
+                prompt = build_constraints_prompt(
+                    st.session_state.constraint_sections,
+                    st.session_state.constraint_color,
+                    st.session_state.constraint_density,
+                )
+                add_user_message_and_start_generation(st.session_state, prompt)
+                st.rerun()
 
     if profile_active:
         effective_tone = active_profile.tone_key

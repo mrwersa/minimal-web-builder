@@ -20,6 +20,7 @@ A sleek, minimalist web application builder powered by Google Gemini AI. Create 
 - Iterative refinement: prior instructions are preserved so follow-up prompts build on the original request
 - Section-level regeneration: pick any top-level section (hero, cards, footer) and regenerate just that block
 - Refine mode: focus a section update on spacing, typography, layout, or color only
+- Constraint-first generation: pick sections, a color limit, and density; the model fills in the details
 - Safety rails: empty inline scripts are stripped and generated JS is audited for complexity and unsafe calls
 - Visible keyboard focus-state verification in generated templates
 - Export options: single `index.html` or split `index.html` + `styles.css` + `app.js`
@@ -129,7 +130,7 @@ Highlights:
 - Phase 1: Refactor into modules, add tests, stabilize generation lifecycle ✅ complete
 - Phase 2: UX/design system and generation controls while staying minimal ✅ complete
 - Phase 3: Export modes, profiles, and product-grade reliability ✅ complete
-- Phase 4: Advanced minimal-builder ideas (constraint-first and refine mode)
+- Phase 4: Advanced minimal-builder ideas — constraint-first generation, refine mode, and safety rails ✅ complete; layout DNA deferred
 
 ## Contributing
 

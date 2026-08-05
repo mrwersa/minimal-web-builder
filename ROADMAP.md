@@ -21,6 +21,7 @@ Build the most reliable minimal web builder for self-contained, beautiful, respo
 - Template memory: save the current page to a local `templates/` dir and seed a fresh conversation from any saved template.
 - Observability: structured JSON events (latency, output size, failures) via the `minimal_web_builder` logger, with an opt-in local JSONL analytics hook (`ANALYTICS_FILE`).
 - Refine mode: regenerate a section focused on a single aspect (spacing, typography, layout, or color).
+- Constraint-first generation: build a page from required sections, a color limit, and density; the model fills in the details.
 - Safety rails: empty inline `<script>` blocks are stripped by the output policy; inline scripts are audited for complexity and unsafe calls (`eval`, `new Function`, `document.write`).
 - ~95% coverage on core non-UI modules; CI gates on lint + syntax + tests + coverage.
 
@@ -111,8 +112,8 @@ Exit criteria:
 ## Phase 4: Advanced Minimal Builder Ideas
 
 Potential additions that preserve minimalism:
-- Constraint-first generation:
-  - Users specify only constraints (sections, color limits, density), model fills details.
+- ✅ Constraint-first generation:
+  - ✅ Build a site from constraints only (required sections, color limit, density); the model fills in the details.
 - Layout DNA:
   - Extract reusable layout grammar from accepted generations.
 - ✅ Refine mode:
