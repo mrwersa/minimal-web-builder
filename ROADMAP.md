@@ -18,6 +18,7 @@ Build the most reliable minimal web builder for self-contained, beautiful, respo
 - App UI styled from the shared design-token palette; accessibility guardrails in the prompt plus a static audit of generated HTML (incl. visible focus styles).
 - Export modes: single `index.html` download or split export (`index.html` + `styles.css` + `app.js`).
 - Generation profiles: `profiles/*.json` bundle tone, complexity, strict mode, and extra prompt guidance; a "Custom" option restores manual controls.
+- Template memory: save the current page to a local `templates/` dir and seed a fresh conversation from any saved template.
 - ~95% coverage on core non-UI modules; CI gates on lint + syntax + tests + coverage.
 
 ## Phase 1: Foundation ✅ (complete)
@@ -93,9 +94,9 @@ Work items:
   - ✅ profiles/minimal.json (strict default).
   - ✅ profiles/startup-landing.json, profiles/portfolio.json.
   - ✅ Profile selector in the sidebar; individual controls disabled while a profile is active.
-- ⬜ Template memory:
-  - ⬜ Save successful outputs as reusable local templates.
-  - ⬜ Let users seed new generations from a prior build.
+- ✅ Template memory:
+  - ✅ Save successful outputs as reusable local templates (`templates/`, git-ignored).
+  - ✅ Let users seed new generations from a prior build (fresh conversation with the template as the baseline).
 - ⬜ Observability:
   - ⬜ Structured logs around API latency and failures.
   - ⬜ Lightweight analytics hooks (local-only, opt-in).
