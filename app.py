@@ -2,6 +2,12 @@ import streamlit as st
 import streamlit.components.v1 as components
 from src.config import load_config
 from src.generation import call_gemini, strip_html_code_fence
+from src.state import (
+    add_user_message_and_start_generation,
+    apply_generation_result,
+    build_generation_messages,
+    init_session_state,
+)
 
 try:
     import google.generativeai as genai
@@ -19,14 +25,7 @@ st.set_page_config(
 )
 
 # --- SESSION STATE ---
-if "messages" not in st.session_state:
-    st.session_state.messages = []
-if "last_app_code" not in st.session_state:
-    st.session_state.last_app_code = None
-if "is_generating" not in st.session_state:
-    st.session_state.is_generating = False
-if "show_preview" not in st.session_state:
-    st.session_state.show_preview = True
+init_session_state(st.session_state)
 
 # --- API CONFIGURATION ---
 config = load_config()
@@ -330,8 +329,7 @@ if st.session_state.is_generating:
 else:
     chat_input = st.chat_input("Describe the website you want to create...")
     if chat_input:
-        st.session_state.messages.append({"role": "user", "content": chat_input})
-        st.session_state.is_generating = True
+        add_user_message_and_start_generation(st.session_state, chat_input)
         st.rerun()
 
 
@@ -340,21 +338,7 @@ else:
 
 # --- PROCESS GENERATION (After UI is rendered) ---
 if st.session_state.is_generating:
-    # Token-efficient prompt: always include latest preview code and most recent user message
-    messages = []
-    # Add the latest preview code if it exists
-    if st.session_state.last_app_code:
-        messages.append({
-            "role": "assistant",
-            "content": f"Here is the current version of the website code:\n\n{st.session_state.last_app_code.strip()}"
-        })
-    # Add only the most recent user message
-    if st.session_state.messages:
-        # Find the last user message
-        for m in reversed(st.session_state.messages):
-            if m["role"] == "user":
-                messages.append({"role": "user", "content": m["content"]})
-                break
+    messages = build_generation_messages(st.session_state)
     output = call_gemini(
         model=gemini_model,
         genai=genai,
@@ -364,9 +348,7 @@ if st.session_state.is_generating:
     )
 
     # Update session state with results
-    st.session_state.messages.append({"role": "assistant", "content": "Your minimalist website has been generated!"})
-    st.session_state.last_app_code = output
-    st.session_state.is_generating = False
+    apply_generation_result(st.session_state, output)
 
     # Refresh UI to show new content
     st.rerun()
