@@ -64,6 +64,45 @@ TONE_PRESETS_BY_KEY: Dict[str, TonePreset] = {t.key: t for t in TONE_PRESETS}
 
 DEFAULT_TONE_KEY = "minimal"
 
+
+@dataclass(frozen=True)
+class ComplexityLevel:
+    key: str
+    label: str
+    guidance: str
+
+
+COMPLEXITY_LEVELS = [
+    ComplexityLevel(
+        key="compact",
+        label="Compact",
+        guidance=(
+            "Build the smallest possible page: 1-2 sections, short copy, and no optional features. "
+            "Every element must earn its place."
+        ),
+    ),
+    ComplexityLevel(
+        key="balanced",
+        label="Balanced",
+        guidance=(
+            "Build a focused page with the essential sections (hero, content, and a footer) "
+            "and moderate copy length. Avoid optional extras."
+        ),
+    ),
+    ComplexityLevel(
+        key="detailed",
+        label="Detailed",
+        guidance=(
+            "Build a richer page with additional sections and features, longer copy, and tasteful "
+            "enhancements, while still keeping the overall design minimal."
+        ),
+    ),
+]
+
+COMPLEXITY_BY_KEY: Dict[str, ComplexityLevel] = {c.key: c for c in COMPLEXITY_LEVELS}
+
+DEFAULT_COMPLEXITY_KEY = "balanced"
+
 STRICT_MINIMAL_GUIDANCE = (
     "Strict minimal mode: use ONLY a neutral monochrome palette with at most one accent color, "
     "maximal whitespace, flat surfaces, no gradients, no drop shadows, no animations or decorative "
@@ -88,3 +127,7 @@ TYPE_SCALE = {"sm": 13, "base": 14, "lg": 16, "xl": 20, "xxl": 28}
 
 def tone_options() -> list[str]:
     return [t.key for t in TONE_PRESETS]
+
+
+def complexity_options() -> list[str]:
+    return [c.key for c in COMPLEXITY_LEVELS]

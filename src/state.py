@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, MutableMapping
 
-from src.theme import DEFAULT_TONE_KEY
+from src.theme import DEFAULT_COMPLEXITY_KEY, DEFAULT_TONE_KEY
 
 
 def init_session_state(state: MutableMapping[str, Any]) -> None:
@@ -12,6 +12,7 @@ def init_session_state(state: MutableMapping[str, Any]) -> None:
     state.setdefault("show_preview", True)
     state.setdefault("generation_tone", DEFAULT_TONE_KEY)
     state.setdefault("strict_minimal_mode", False)
+    state.setdefault("generation_complexity", DEFAULT_COMPLEXITY_KEY)
 
 
 def add_user_message_and_start_generation(

@@ -10,11 +10,12 @@ Build the most reliable minimal web builder for self-contained, beautiful, respo
 
 ## Current State (v1)
 
-- Modular architecture: `app.py` orchestrates UI; `src/` holds config, generation, rendering, state, validation, safety, and theme.
+- Modular architecture: `app.py` orchestrates UI; `src/` holds config, generation, rendering, state, validation, safety, theme, and a11y.
 - Gemini prompt-to-HTML generation with sandboxed in-app preview.
 - Session state lifecycle, input validation, output safety policy, and deterministic tests.
-- Generation controls (tone presets + strict minimal mode) shipped as Phase 2 groundwork.
-- ~95% coverage on core non-UI modules; CI gates on lint + syntax + tests.
+- Generation controls (tone presets, strict minimal mode, complexity slider) shipped as Phase 2 groundwork.
+- Accessibility guardrails in the prompt plus a static accessibility audit of generated HTML.
+- ~95% coverage on core non-UI modules; CI gates on lint + syntax + tests + coverage.
 
 ## Phase 1: Foundation ✅ (complete)
 
@@ -58,21 +59,22 @@ Work items:
   - ✅ Typography scale, spacing scale, neutral + accent palette.
   - ✅ Shared UI constants for Streamlit theme consistency.
   - ⬜ Consume tokens in the app CSS/Streamlit theme (follow-up).
-- 🔄 Better generation controls:
+- ✅ Better generation controls:
   - ✅ Tone presets (minimal, editorial, product, portfolio, landing).
   - ✅ Optional strict minimal mode (fewer decorations).
-  - ⬜ Output size and complexity sliders.
+  - ✅ Output complexity slider (compact / balanced / detailed).
 - ⬜ Prompt iteration UX:
   - ⬜ Keep instruction history with concise diffs.
   - ⬜ Regenerate section-level variants (hero, cards, footer).
-- ⬜ Accessibility checks:
-  - ⬜ Contrast guardrails in generation prompt.
-  - ⬜ Keyboard navigation checks in generated templates.
+- ✅ Accessibility checks:
+  - ✅ Contrast guardrails in generation prompt (WCAG AA baseline).
+  - ✅ Keyboard navigation/structure audit of generated templates (alt, labels, h1, tabindex).
+  - ⬜ Visual focus-state verification in generated templates.
 
 Exit criteria:
 - 🔄 Reduced failed-generation rate (validation + friendly errors + safety policy cut failure modes; rate not yet measured).
 - ⬜ Faster time-to-usable-result for first prompt.
-- ⬜ Documented visual system and generation presets.
+- 🔄 Documented visual system and generation presets (presets documented; full visual system pending).
 
 ## Phase 3: Productization (4-8 weeks)
 

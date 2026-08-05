@@ -2,7 +2,13 @@ import streamlit as st
 import streamlit.components.v1 as components
 from src.config import load_config
 from src.generation import call_gemini, strip_html_code_fence
-from src.theme import TONE_PRESETS_BY_KEY, tone_options
+from src.a11y import audit_generated_html
+from src.theme import (
+    COMPLEXITY_BY_KEY,
+    TONE_PRESETS_BY_KEY,
+    complexity_options,
+    tone_options,
+)
 from src.rendering import (
     build_sandboxed_preview_html,
     EMPTY_STATE_HTML,
@@ -62,6 +68,13 @@ with st.sidebar:
         options=tone_options(),
         format_func=lambda key: TONE_PRESETS_BY_KEY[key].label,
         key="generation_tone",
+    )
+    st.select_slider(
+        "Complexity",
+        options=complexity_options(),
+        format_func=lambda key: COMPLEXITY_BY_KEY[key].label,
+        key="generation_complexity",
+        help="How much the generated page should include. Compact = minimal; Detailed = richer.",
     )
     st.toggle("Strict minimal mode", key="strict_minimal_mode")
     st.caption("Strict minimal mode restricts output to flat, monochrome, decoration-free designs.")
@@ -312,6 +325,7 @@ if st.session_state.is_generating:
         max_output_tokens=max_output_tokens,
         tone_key=st.session_state.generation_tone,
         strict_minimal=st.session_state.strict_minimal_mode,
+        complexity_key=st.session_state.generation_complexity,
     )
 
     if output.startswith("API error:"):
@@ -322,6 +336,10 @@ if st.session_state.is_generating:
     sanitized_output, safety_alerts = apply_output_safety_policy(output)
     if safety_alerts:
         st.warning("Safety policy applied: " + " ".join(safety_alerts))
+
+    a11y_notes = audit_generated_html(strip_html_code_fence(sanitized_output))
+    if a11y_notes:
+        st.info("Accessibility notes: " + " ".join(a11y_notes))
 
     # Update session state with results
     apply_generation_result(st.session_state, sanitized_output)
