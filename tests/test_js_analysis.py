@@ -1,4 +1,8 @@
-from src.js_analysis import audit_inline_scripts, extract_inline_scripts
+from src.js_analysis import (
+    audit_inline_scripts,
+    extract_inline_scripts,
+    inline_script_statement_count,
+)
 
 
 def test_extract_inline_scripts_returns_bodies() -> None:
@@ -70,3 +74,15 @@ def test_audit_ignores_json_ld_data_script() -> None:
 
 def test_audit_returns_empty_for_no_scripts() -> None:
     assert audit_inline_scripts("<main>hello</main>") == []
+
+
+def test_inline_script_statement_count_sums_across_blocks() -> None:
+    html = "<script>var a = 1;</script><p>x</p><script>var b = 2;</script>"
+
+    assert inline_script_statement_count(html) == 2
+
+
+def test_inline_script_statement_count_skips_external_and_empty() -> None:
+    html = "<script src='https://x/app.js'></script><script>  </script>"
+
+    assert inline_script_statement_count(html) == 0

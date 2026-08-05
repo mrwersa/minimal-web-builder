@@ -35,6 +35,11 @@ def _statement_count(code: str) -> int:
     return _strip_comments_and_literals(code).count(";")
 
 
+def inline_script_statement_count(html: str) -> int:
+    """Total inline JS statement count across all inline <script> blocks."""
+    return sum(_statement_count(code) for code in extract_inline_scripts(html))
+
+
 def audit_inline_scripts(html: str) -> list[str]:
     """Run lightweight static checks on inline scripts (complexity, unsafe calls)."""
     alerts: list[str] = []
