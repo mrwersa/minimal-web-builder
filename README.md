@@ -8,15 +8,13 @@ A sleek, minimalist web application builder powered by Google Gemini AI. Create 
 
 ## Features
 
-- 🔍 **Minimalist Design** — Clean, distraction-free interface
-- 📱 **Responsive Web App Generation** — Websites work across all devices
-- 💬 **Simple Chat Interface** — Describe your website idea in plain language
-- 🧠 **Google Gemini AI Integration** — Advanced AI generates high-quality code
-- 🔄 **Instant Preview** — See your website immediately, with a full-height preview area
-- 📝 **Code View** — Examine and download the generated HTML/CSS/JS
-- ✨ **Modern Loader Overlay** — Animated spinner and blurred preview while generating
-- � **Input Lock During Generation** — Chat input is disabled while your site is being built
-- �📦 **No Dependencies** — Pure HTML/CSS/JS outputs with no frameworks
+- Minimal, distraction-free interface
+- Responsive web app generation
+- Prompt-driven chat workflow
+- Gemini-powered HTML/CSS/JS generation
+- Instant preview and code view
+- Input lock while generation is running
+- Self-contained output (no external frontend dependencies)
 
 
 ## Setup
@@ -82,9 +80,45 @@ A sleek, minimalist web application builder powered by Google Gemini AI. Create 
 - google-generativeai>=0.3.2
 - python-dotenv
 
+## Repository Protection
+
+This repository uses PR-only governance on the main branch:
+
+- Direct pushes to main are blocked
+- At least 1 approving review is required
+- CODEOWNERS review is required
+- Stale approvals are dismissed after new commits
+- Last push must be approved by someone else
+- Conversation resolution is required before merge
+- Linear history is required
+- Force pushes and branch deletions are blocked
+- CI status check `validate` is required
+
+See:
+
+- [CONTRIBUTING.md](CONTRIBUTING.md)
+- [.github/CODEOWNERS](.github/CODEOWNERS)
+- [.github/PULL_REQUEST_TEMPLATE/default.md](.github/PULL_REQUEST_TEMPLATE/default.md)
+- [.github/workflows/ci.yml](.github/workflows/ci.yml)
+
+## Product Roadmap
+
+The detailed roadmap is in [ROADMAP.md](ROADMAP.md).
+
+Highlights:
+
+- Phase 1: Refactor into modules, add tests, stabilize generation lifecycle
+- Phase 2: UX/design system and generation controls while staying minimal
+- Phase 3: Export modes, profiles, and product-grade reliability
+- Phase 4: Advanced minimal-builder ideas (constraint-first and refine mode)
+
 ## Contributing
 
-Contributions are welcome! Please feel free to submit a Pull Request.
+Contributions are welcome through pull requests only. Start with [CONTRIBUTING.md](CONTRIBUTING.md).
+
+## Security
+
+For private vulnerability reporting, see [SECURITY.md](SECURITY.md).
 
 ## License
 
