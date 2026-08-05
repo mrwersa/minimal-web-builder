@@ -1,5 +1,6 @@
 from src.state import (
     add_user_message_and_start_generation,
+    apply_generation_error,
     apply_generation_result,
     build_generation_messages,
     init_session_state,
@@ -44,3 +45,17 @@ def test_generation_state_transitions() -> None:
     assert state["is_generating"] is False
     assert state["last_app_code"] == "<html></html>"
     assert state["messages"][-1]["role"] == "assistant"
+
+
+def test_generation_error_does_not_override_last_code() -> None:
+    state = {
+        "messages": [{"role": "user", "content": "retry"}],
+        "is_generating": True,
+        "last_app_code": "<div>stable</div>",
+    }
+
+    apply_generation_error(state, "API error: timeout")
+
+    assert state["is_generating"] is False
+    assert state["last_app_code"] == "<div>stable</div>"
+    assert "Generation failed" in state["messages"][-1]["content"]

@@ -44,3 +44,13 @@ def apply_generation_result(state: MutableMapping[str, Any], output: str) -> Non
     )
     state["last_app_code"] = output
     state["is_generating"] = False
+
+
+def apply_generation_error(state: MutableMapping[str, Any], error_message: str) -> None:
+    state["messages"].append(
+        {
+            "role": "assistant",
+            "content": f"Generation failed. Please try again. ({error_message})",
+        }
+    )
+    state["is_generating"] = False

@@ -10,10 +10,12 @@ from src.rendering import (
 )
 from src.state import (
     add_user_message_and_start_generation,
+    apply_generation_error,
     apply_generation_result,
     build_generation_messages,
     init_session_state,
 )
+from src.validation import validate_user_prompt
 
 try:
     import google.generativeai as genai
@@ -39,6 +41,7 @@ api_key = config.api_key
 model = config.model
 temperature = config.temperature
 max_output_tokens = config.max_output_tokens
+max_prompt_chars = config.max_prompt_chars
 
 if not api_key:
     st.warning("Please provide your Gemini API key in the .env file to start.")
@@ -277,9 +280,16 @@ if st.session_state.is_generating:
     st.chat_input("Generating... Please wait.", disabled=True)
 else:
     chat_input = st.chat_input("Describe the website you want to create...")
-    if chat_input:
-        add_user_message_and_start_generation(st.session_state, chat_input)
-        st.rerun()
+    if chat_input is not None:
+        validated_prompt, validation_error = validate_user_prompt(
+            chat_input,
+            max_prompt_chars=max_prompt_chars,
+        )
+        if validation_error:
+            st.warning(validation_error)
+        else:
+            add_user_message_and_start_generation(st.session_state, validated_prompt)
+            st.rerun()
 
 
 # --- GENERATION STATUS INDICATOR ---
@@ -295,6 +305,11 @@ if st.session_state.is_generating:
         temperature=temperature,
         max_output_tokens=max_output_tokens,
     )
+
+    if output.startswith("API error:"):
+        st.error("Generation failed due to an API error. Please try again.")
+        apply_generation_error(st.session_state, output)
+        st.rerun()
 
     # Update session state with results
     apply_generation_result(st.session_state, output)

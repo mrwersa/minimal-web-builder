@@ -12,6 +12,7 @@ class AppConfig:
     model: str
     temperature: float
     max_output_tokens: int
+    max_prompt_chars: int
 
 
 def _float_env(name: str, default: float) -> float:
@@ -41,4 +42,5 @@ def load_config() -> AppConfig:
         model=os.getenv("GEMINI_MODEL", "gemini-1.5-flash"),
         temperature=_float_env("GEMINI_TEMPERATURE", 0.2),
         max_output_tokens=_int_env("GEMINI_MAX_OUTPUT_TOKENS", 1500),
+        max_prompt_chars=_int_env("GEMINI_MAX_PROMPT_CHARS", 1200),
     )
