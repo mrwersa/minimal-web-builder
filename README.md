@@ -125,8 +125,8 @@ The detailed roadmap is in [ROADMAP.md](ROADMAP.md).
 Highlights:
 
 - Phase 1: Refactor into modules, add tests, stabilize generation lifecycle ✅ complete
-- Phase 2: UX/design system and generation controls while staying minimal 🔄 in progress
-- Phase 3: Export modes, profiles, and product-grade reliability
+- Phase 2: UX/design system and generation controls while staying minimal ✅ complete
+- Phase 3: Export modes, profiles, and product-grade reliability ✅ complete
 - Phase 4: Advanced minimal-builder ideas (constraint-first and refine mode)
 
 ## Contributing

@@ -81,7 +81,7 @@ Exit criteria:
 - ✅ Faster time-to-usable-result for first prompt (single-prompt flow + presets reduce iterations; not yet benchmarked).
 - ✅ Documented visual system and generation presets (design tokens consumed across the app; presets documented).
 
-## Phase 3: Productization (in progress)
+## Phase 3: Productization ✅ (complete)
 
 Goals:
 - Make the tool production-usable for repeated workflows.
@@ -103,8 +103,8 @@ Work items:
   - ✅ Lightweight analytics hooks (local-only, opt-in via `ANALYTICS_FILE` JSONL).
 
 Exit criteria:
-- Repeatable workflow for build -> revise -> export.
-- Strong reliability for long editing sessions.
+- ✅ Repeatable workflow for build -> revise -> export (chat build, section refine, profiles, template seed, single/split export).
+- ✅ Strong reliability for long editing sessions (instruction history, stable session state, structured error/failure logging).
 
 ## Phase 4: Advanced Minimal Builder Ideas
 
