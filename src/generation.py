@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from typing import Any, Dict, List
 
+from src.theme import DEFAULT_TONE_KEY, STRICT_MINIMAL_GUIDANCE, TONE_PRESETS_BY_KEY
+
 BASE_PROMPT = (
     "You are an expert web app developer and UI designer specializing in minimalist, clean designs.\n"
     "Your task: Generate a beautiful, modern, and minimalistic single-page web app using only HTML, CSS, and minimal JavaScript.\n"
@@ -20,9 +22,27 @@ BASE_PROMPT = (
 )
 
 
-def build_generation_prompt(messages: List[Dict[str, str]]) -> str:
+def _style_guidance(tone_key: str, strict_minimal: bool) -> str:
+    guidance: List[str] = []
+    preset = TONE_PRESETS_BY_KEY.get(tone_key)
+    if preset is not None:
+        guidance.append(f"Style direction: {preset.style_guidance}")
+    if strict_minimal:
+        guidance.append(STRICT_MINIMAL_GUIDANCE)
+    return "\n".join(guidance)
+
+
+def build_generation_prompt(
+    messages: List[Dict[str, str]],
+    tone_key: str = DEFAULT_TONE_KEY,
+    strict_minimal: bool = False,
+) -> str:
     conversation = "\n".join(f"{m['role'].upper()}: {m['content']}" for m in messages)
-    return f"{BASE_PROMPT}\n\nConversation:\n{conversation}"
+    base_prompt = BASE_PROMPT
+    guidance = _style_guidance(tone_key, strict_minimal)
+    if guidance:
+        base_prompt = f"{base_prompt}\n\nAdditional style constraints:\n{guidance}"
+    return f"{base_prompt}\n\nConversation:\n{conversation}"
 
 
 def strip_html_code_fence(text: str) -> str:
@@ -43,9 +63,15 @@ def call_gemini(
     messages: List[Dict[str, str]],
     temperature: float,
     max_output_tokens: int,
+    tone_key: str = DEFAULT_TONE_KEY,
+    strict_minimal: bool = False,
 ) -> str:
     try:
-        prompt = build_generation_prompt(messages)
+        prompt = build_generation_prompt(
+            messages,
+            tone_key=tone_key,
+            strict_minimal=strict_minimal,
+        )
         response = model.generate_content(
             prompt,
             generation_config=genai.types.GenerationConfig(

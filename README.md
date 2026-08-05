@@ -12,6 +12,8 @@ A sleek, minimalist web application builder powered by Google Gemini AI. Create 
 - Responsive web app generation
 - Prompt-driven chat workflow
 - Gemini-powered HTML/CSS/JS generation
+- Tone presets (minimal, editorial, product, portfolio, landing)
+- Optional strict minimal mode for flat, monochrome designs
 - Instant preview and code view
 - Input lock while generation is running
 - Self-contained output (no external frontend dependencies)
@@ -62,9 +64,10 @@ A sleek, minimalist web application builder powered by Google Gemini AI. Create 
 1. The application uses the Streamlit framework for the user interface
 2. When you enter a prompt, it's sent to Google's Gemini AI
 3. Gemini generates complete HTML, CSS, and JavaScript code
-4. While generating, the preview area is blurred and a loader overlay is shown
-5. The code is rendered directly in the browser for immediate preview (full height)
-6. You can view and download the source code
+4. Use the sidebar to pick a tone preset (editorial, product, portfolio, landing) or enable strict minimal mode before generating
+5. While generating, the preview area is blurred and a loader overlay is shown
+6. The code is rendered directly in the browser for immediate preview (full height)
+7. You can view and download the source code
 
 ## Technologies
 
@@ -107,8 +110,8 @@ The detailed roadmap is in [ROADMAP.md](ROADMAP.md).
 
 Highlights:
 
-- Phase 1: Refactor into modules, add tests, stabilize generation lifecycle
-- Phase 2: UX/design system and generation controls while staying minimal
+- Phase 1: Refactor into modules, add tests, stabilize generation lifecycle ✅ complete
+- Phase 2: UX/design system and generation controls while staying minimal 🔄 in progress
 - Phase 3: Export modes, profiles, and product-grade reliability
 - Phase 4: Advanced minimal-builder ideas (constraint-first and refine mode)
 

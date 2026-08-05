@@ -2,6 +2,7 @@ import streamlit as st
 import streamlit.components.v1 as components
 from src.config import load_config
 from src.generation import call_gemini, strip_html_code_fence
+from src.theme import TONE_PRESETS_BY_KEY, tone_options
 from src.rendering import (
     build_sandboxed_preview_html,
     EMPTY_STATE_HTML,
@@ -52,6 +53,18 @@ if not api_key:
 # Configure Gemini
 genai.configure(api_key=api_key)
 gemini_model = genai.GenerativeModel(model)
+
+# --- GENERATION OPTIONS (SIDEBAR) ---
+with st.sidebar:
+    st.markdown("#### Generation options")
+    st.selectbox(
+        "Tone",
+        options=tone_options(),
+        format_func=lambda key: TONE_PRESETS_BY_KEY[key].label,
+        key="generation_tone",
+    )
+    st.toggle("Strict minimal mode", key="strict_minimal_mode")
+    st.caption("Strict minimal mode restricts output to flat, monochrome, decoration-free designs.")
 
 # --- FIRST REMOVE STREAMLIT DEFAULTS ---
 # This must come first to properly hide the default components
@@ -123,14 +136,17 @@ html, body, .stApp {
     position: relative;
     padding-bottom: 24px;
 }
-.app-footer, .stChatInput {
-}
 .stChatInput {
-    margin: 0 !important;
-    padding: 0 !important;
+    position: fixed !important;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    width: 100vw;
+    z-index: 2000;
     background: #f7f9fb !important;
-    box-shadow: none !important;
-    border-radius: 0 !important;
+    border-top: 1px solid #e9ecef;
+    margin: 0 !important;
+    padding: 0 20px;
 }
 .stChatInput > div {
     margin: 0 !important;
@@ -149,12 +165,12 @@ html, body, .stApp {
     border-radius: 0 !important;
     box-shadow: none !important;
     outline: none !important;
-    transition: border 0.2s;
+    transition: border-color 0.2s;
+}
 .stChatInput input:focus, .stChatInput textarea:focus {
-    border: none !important;
+    border: 1.5px solid #1976d2 !important;
     outline: none !important;
     background: #fff !important;
-}
 }
 .stChatInput input::placeholder, .stChatInput textarea::placeholder {
     color: #78909c !important;
@@ -163,19 +179,6 @@ html, body, .stApp {
 .stChatInput input:disabled, .stChatInput textarea:disabled {
     background: #f7f9fb !important;
     color: #b0b8c1 !important;
-}
-}
-    position: fixed !important;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    width: 100vw;
-    z-index: 2000;
-    background: white;
-    border-top: 1px solid #e9ecef;
-    margin: 0 !important;
-    padding: 0 20px;
-}
 }
 .preview-container {
     width: 100%;
@@ -307,6 +310,8 @@ if st.session_state.is_generating:
         messages=messages,
         temperature=temperature,
         max_output_tokens=max_output_tokens,
+        tone_key=st.session_state.generation_tone,
+        strict_minimal=st.session_state.strict_minimal_mode,
     )
 
     if output.startswith("API error:"):
