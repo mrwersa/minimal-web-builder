@@ -5,3 +5,4 @@ __pycache__/
 .coverage
 htmlcov/
 templates/
+layout_dna/

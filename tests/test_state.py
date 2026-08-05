@@ -26,6 +26,7 @@ def test_init_session_state_sets_defaults() -> None:
     assert state["generation_tone"] == "minimal"
     assert state["strict_minimal_mode"] is False
     assert state["generation_complexity"] == "balanced"
+    assert state["layout_dna_guidance"] == ""
 
 
 def test_build_generation_messages_includes_instruction_history() -> None:
@@ -148,6 +149,7 @@ def test_seed_from_template_starts_fresh_conversation() -> None:
         "is_generating": True,
         "is_regenerating_section": True,
         "pending_section_index": 3,
+        "layout_dna_guidance": "some guidance",
     }
 
     seed_from_template(state, "<main>new</main>")
@@ -157,3 +159,4 @@ def test_seed_from_template_starts_fresh_conversation() -> None:
     assert state["is_generating"] is False
     assert state["is_regenerating_section"] is False
     assert state["pending_section_index"] is None
+    assert state["layout_dna_guidance"] == ""

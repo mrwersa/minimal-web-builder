@@ -19,6 +19,14 @@ from src.generation import (
     strip_html_code_fence,
 )
 from src.js_analysis import audit_inline_scripts
+from src.layout_dna import (
+    combine_guidance,
+    extract_layout_dna,
+    grammar_signature,
+    list_saved_dnas,
+    save_dna,
+    to_guidance,
+)
 from src.profiles import (
     CUSTOM_PROFILE_ID,
     get_profile,
@@ -113,6 +121,7 @@ except (ValueError, TypeError) as exc:
 
 # --- TEMPLATE MEMORY ---
 TEMPLATES_DIR = Path(__file__).resolve().parent / "templates"
+LAYOUT_DNA_DIR = Path(__file__).resolve().parent / "layout_dna"
 
 # --- GENERATION OPTIONS (SIDEBAR) ---
 with st.sidebar:
@@ -244,6 +253,50 @@ with st.sidebar:
             st.caption("No sections detected in the current page.")
     else:
         st.caption("Generate a website first, then refine individual sections.")
+
+    st.markdown("#### Layout DNA")
+    if (
+        st.session_state.last_app_code
+        and not st.session_state.is_generating
+        and not st.session_state.is_regenerating_section
+    ):
+        current_dna = extract_layout_dna(
+            strip_html_code_fence(st.session_state.last_app_code)
+        )
+        st.caption(
+            f"Grammar: **{grammar_signature(current_dna)}** · "
+            f"{current_dna.script_statement_count} JS statement(s)"
+        )
+        if st.button("Save this layout as DNA"):
+            saved = save_dna(LAYOUT_DNA_DIR, current_dna)
+            st.success(f"Saved layout DNA '{saved.stem}'.")
+            st.rerun()
+        saved_dnas = list_saved_dnas(LAYOUT_DNA_DIR)
+        if saved_dnas:
+            dna_labels = [
+                f"{name}: {grammar_signature(dna)}" for name, dna in saved_dnas
+            ]
+            st.selectbox(
+                "Apply a saved layout",
+                options=list(range(len(saved_dnas))),
+                format_func=lambda i: dna_labels[i],
+                key="layout_dna_choice",
+            )
+            col1, col2 = st.columns(2)
+            with col1:
+                if st.button("Use layout"):
+                    st.session_state.layout_dna_guidance = to_guidance(
+                        saved_dnas[st.session_state.layout_dna_choice][1]
+                    )
+                    st.rerun()
+            with col2:
+                if st.button("Clear layout"):
+                    st.session_state.layout_dna_guidance = ""
+                    st.rerun()
+        if st.session_state.layout_dna_guidance:
+            st.caption("Layout guidance will be applied to the next generation.")
+    else:
+        st.caption("Generate a website first to inspect its layout DNA.")
 
 # --- APP STYLES (token-driven, from src/theme) ---
 st.markdown(build_app_styles(), unsafe_allow_html=True)
@@ -417,7 +470,10 @@ if st.session_state.is_regenerating_section:
         tone_key=effective_tone,
         strict_minimal=effective_strict,
         complexity_key=effective_complexity,
-        extra_guidance=effective_guidance,
+        extra_guidance=combine_guidance(
+            effective_guidance,
+            st.session_state.get("layout_dna_guidance"),
+        ),
         analytics_file=config.analytics_file,
         refine_aspect_key=st.session_state.get("refine_aspect"),
     )
@@ -461,7 +517,10 @@ if st.session_state.is_generating:
         tone_key=effective_tone,
         strict_minimal=effective_strict,
         complexity_key=effective_complexity,
-        extra_guidance=effective_guidance,
+        extra_guidance=combine_guidance(
+            effective_guidance,
+            st.session_state.get("layout_dna_guidance"),
+        ),
         analytics_file=config.analytics_file,
     )
 

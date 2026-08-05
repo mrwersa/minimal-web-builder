@@ -18,6 +18,7 @@ def init_session_state(state: MutableMapping[str, Any]) -> None:
     state.setdefault("generation_tone", DEFAULT_TONE_KEY)
     state.setdefault("strict_minimal_mode", False)
     state.setdefault("generation_complexity", DEFAULT_COMPLEXITY_KEY)
+    state.setdefault("layout_dna_guidance", "")
 
 
 def add_user_message_and_start_generation(
@@ -105,3 +106,4 @@ def seed_from_template(state: MutableMapping[str, Any], html: str) -> None:
     state["is_generating"] = False
     state["is_regenerating_section"] = False
     state["pending_section_index"] = None
+    state["layout_dna_guidance"] = ""
