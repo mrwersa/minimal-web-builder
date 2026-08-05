@@ -1,4 +1,4 @@
-from src.generation import build_generation_prompt, strip_html_code_fence
+from src.generation import BASE_PROMPT, build_generation_prompt, strip_html_code_fence
 from src.theme import DEFAULT_TONE_KEY, STRICT_MINIMAL_GUIDANCE
 
 
@@ -54,3 +54,36 @@ def test_build_generation_prompt_unknown_tone_omits_guidance() -> None:
         tone_key="not-a-real-tone",
     )
     assert "Style direction:" not in prompt
+
+
+def test_build_generation_prompt_default_complexity_is_balanced() -> None:
+    prompt = build_generation_prompt([{"role": "user", "content": "hello"}])
+    assert "Complexity:" in prompt
+    assert "essential sections" in prompt
+
+
+def test_build_generation_prompt_uses_complexity_guidance() -> None:
+    compact = build_generation_prompt(
+        [{"role": "user", "content": "hello"}],
+        complexity_key="compact",
+    )
+    assert "smallest possible page" in compact
+    detailed = build_generation_prompt(
+        [{"role": "user", "content": "hello"}],
+        complexity_key="detailed",
+    )
+    assert "richer page" in detailed
+
+
+def test_build_generation_prompt_unknown_complexity_omits_guidance() -> None:
+    prompt = build_generation_prompt(
+        [{"role": "user", "content": "hello"}],
+        complexity_key="not-a-real-level",
+    )
+    assert "Complexity:" not in prompt
+
+
+def test_base_prompt_contains_accessibility_guardrails() -> None:
+    assert "WCAG AA" in BASE_PROMPT
+    assert "focus indicators" in BASE_PROMPT
+    assert "single <h1>" in BASE_PROMPT

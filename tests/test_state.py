@@ -17,6 +17,7 @@ def test_init_session_state_sets_defaults() -> None:
     assert state["show_preview"] is True
     assert state["generation_tone"] == "minimal"
     assert state["strict_minimal_mode"] is False
+    assert state["generation_complexity"] == "balanced"
 
 
 def test_build_generation_messages_prefers_last_user_message() -> None:

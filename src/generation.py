@@ -2,7 +2,13 @@ from __future__ import annotations
 
 from typing import Any, Dict, List
 
-from src.theme import DEFAULT_TONE_KEY, STRICT_MINIMAL_GUIDANCE, TONE_PRESETS_BY_KEY
+from src.theme import (
+    COMPLEXITY_BY_KEY,
+    DEFAULT_COMPLEXITY_KEY,
+    DEFAULT_TONE_KEY,
+    STRICT_MINIMAL_GUIDANCE,
+    TONE_PRESETS_BY_KEY,
+)
 
 BASE_PROMPT = (
     "You are an expert web app developer and UI designer specializing in minimalist, clean designs.\n"
@@ -10,6 +16,9 @@ BASE_PROMPT = (
     "Requirements:\n"
     "- Create a MINIMALIST design with clean typography, ample whitespace, and subtle effects\n"
     "- Use best practices for accessibility, responsiveness, and performance\n"
+    "- Accessibility: ensure text has sufficient contrast against its background (WCAG AA or better), "
+    "provide visible focus indicators for keyboard navigation, use semantic HTML landmarks, "
+    "label all form controls, and keep heading structure hierarchical with a single <h1>\n"
     "- Focus on simplicity, readability and usability\n"
     "- Use modern CSS (Flexbox/Grid) but keep visual elements minimal\n"
     "- Avoid unnecessary frameworks, libraries, or decorative elements\n"
@@ -32,14 +41,25 @@ def _style_guidance(tone_key: str, strict_minimal: bool) -> str:
     return "\n".join(guidance)
 
 
+def _complexity_guidance(complexity_key: str) -> str:
+    level = COMPLEXITY_BY_KEY.get(complexity_key)
+    if level is None:
+        return ""
+    return f"Complexity: {level.guidance}"
+
+
 def build_generation_prompt(
     messages: List[Dict[str, str]],
     tone_key: str = DEFAULT_TONE_KEY,
     strict_minimal: bool = False,
+    complexity_key: str = DEFAULT_COMPLEXITY_KEY,
 ) -> str:
     conversation = "\n".join(f"{m['role'].upper()}: {m['content']}" for m in messages)
     base_prompt = BASE_PROMPT
     guidance = _style_guidance(tone_key, strict_minimal)
+    complexity = _complexity_guidance(complexity_key)
+    if complexity:
+        guidance = f"{guidance}\n{complexity}" if guidance else complexity
     if guidance:
         base_prompt = f"{base_prompt}\n\nAdditional style constraints:\n{guidance}"
     return f"{base_prompt}\n\nConversation:\n{conversation}"
@@ -65,12 +85,14 @@ def call_gemini(
     max_output_tokens: int,
     tone_key: str = DEFAULT_TONE_KEY,
     strict_minimal: bool = False,
+    complexity_key: str = DEFAULT_COMPLEXITY_KEY,
 ) -> str:
     try:
         prompt = build_generation_prompt(
             messages,
             tone_key=tone_key,
             strict_minimal=strict_minimal,
+            complexity_key=complexity_key,
         )
         response = model.generate_content(
             prompt,
