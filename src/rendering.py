@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import html
+
 PREVIEW_LOADER_OVERLAY_HTML = """
 <style>
 .preview-loader-overlay {
@@ -60,6 +62,31 @@ EMPTY_STATE_HTML = """
 """.strip()
 
 NO_CODE_PLACEHOLDER = "<!-- No code generated yet -->"
+
+
+def build_sandboxed_preview_html(generated_html: str) -> str:
+    # Constrain generated output to a sandboxed iframe with a restrictive CSP.
+    srcdoc_document = (
+        "<!doctype html>"
+        "<html><head>"
+        "<meta charset=\"utf-8\">"
+        "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">"
+        "<meta http-equiv=\"Content-Security-Policy\" "
+        "content=\"default-src 'none'; img-src data: blob:; style-src 'unsafe-inline'; script-src 'unsafe-inline'; "
+        "font-src data:; connect-src 'none'; frame-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none';\">"
+        "</head><body style=\"margin:0;padding:0;\">"
+        f"{generated_html}"
+        "</body></html>"
+    )
+    escaped_srcdoc = html.escape(srcdoc_document, quote=True)
+    return (
+        "<iframe "
+        "sandbox=\"allow-scripts allow-forms\" "
+        "referrerpolicy=\"no-referrer\" "
+        f"srcdoc=\"{escaped_srcdoc}\" "
+        "style=\"width:100%;height:100%;border:0;background:#fff;\""
+        "></iframe>"
+    )
 
 
 def preview_container_class(is_generating: bool) -> str:
