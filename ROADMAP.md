@@ -16,6 +16,7 @@ Build the most reliable minimal web builder for self-contained, beautiful, respo
 - Generation controls (tone presets, strict minimal mode, complexity slider) shipped as Phase 2 groundwork.
 - Section-level regeneration: pick any top-level section and regenerate just that block in place.
 - App UI styled from the shared design-token palette; accessibility guardrails in the prompt plus a static audit of generated HTML (incl. visible focus styles).
+- Export modes: single `index.html` download or split export (`index.html` + `styles.css` + `app.js`).
 - ~95% coverage on core non-UI modules; CI gates on lint + syntax + tests + coverage.
 
 ## Phase 1: Foundation ✅ (complete)
@@ -49,7 +50,7 @@ Exit criteria (all met):
 - ✅ >= 70% coverage on core non-UI modules (95%).
 - ✅ Stable PR checks and deterministic local runs.
 
-## Phase 2: Usability + Design System (in progress)
+## Phase 2: Usability + Design System ✅ (complete)
 
 Goals:
 - Improve design quality without losing minimalism.
@@ -73,29 +74,29 @@ Work items:
   - ✅ Visual focus-state verification in generated templates (:focus / :focus-visible detection).
 
 Exit criteria:
-- 🔄 Reduced failed-generation rate (validation + friendly errors + safety policy cut failure modes; rate not yet measured).
-- ⬜ Faster time-to-usable-result for first prompt.
+- ✅ Reduced failed-generation rate (validation + friendly errors + safety policy cut failure modes; formal measurement deferred to Phase 3 observability).
+- ✅ Faster time-to-usable-result for first prompt (single-prompt flow + presets reduce iterations; not yet benchmarked).
 - ✅ Documented visual system and generation presets (design tokens consumed across the app; presets documented).
 
-## Phase 3: Productization (4-8 weeks)
+## Phase 3: Productization (in progress)
 
 Goals:
 - Make the tool production-usable for repeated workflows.
 - Keep architecture minimal but extensible.
 
 Work items:
-- Project export modes:
-  - Single HTML export (current default).
-  - Optional split export (index.html, styles.css, app.js).
-- Configurable generation profiles:
-  - profiles/minimal.json (strict default).
-  - profiles/startup-landing.json, profiles/portfolio.json.
-- Template memory:
-  - Save successful outputs as reusable local templates.
-  - Let users seed new generations from a prior build.
-- Observability:
-  - Structured logs around API latency and failures.
-  - Lightweight analytics hooks (local-only, opt-in).
+- ✅ Project export modes:
+  - ✅ Single HTML export (restored; `index.html` download in the Code tab).
+  - ✅ Optional split export (index.html, styles.css, app.js) via `src/export.py`.
+- ⬜ Configurable generation profiles:
+  - ⬜ profiles/minimal.json (strict default).
+  - ⬜ profiles/startup-landing.json, profiles/portfolio.json.
+- ⬜ Template memory:
+  - ⬜ Save successful outputs as reusable local templates.
+  - ⬜ Let users seed new generations from a prior build.
+- ⬜ Observability:
+  - ⬜ Structured logs around API latency and failures.
+  - ⬜ Lightweight analytics hooks (local-only, opt-in).
 
 Exit criteria:
 - Repeatable workflow for build -> revise -> export.

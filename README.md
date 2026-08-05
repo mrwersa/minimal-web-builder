@@ -19,6 +19,7 @@ A sleek, minimalist web application builder powered by Google Gemini AI. Create 
 - Iterative refinement: prior instructions are preserved so follow-up prompts build on the original request
 - Section-level regeneration: pick any top-level section (hero, cards, footer) and regenerate just that block
 - Visible keyboard focus-state verification in generated templates
+- Export options: single `index.html` or split `index.html` + `styles.css` + `app.js`
 - Instant preview and code view
 - Input lock while generation is running
 - Self-contained output (no external frontend dependencies)
@@ -63,7 +64,7 @@ A sleek, minimalist web application builder powered by Google Gemini AI. Create 
 4. Press enter. While your site is being generated, the preview area will blur and a modern animated loader will appear above it. The chat input is disabled until generation is complete.
 5. Preview your website in the main area (full height up to the chat input)
 6. Use the "View Code" tab to see the HTML/CSS/JS
-7. Download the HTML file to use anywhere
+7. In the Code tab, pick an export format: **Single HTML** downloads one self-contained `index.html`, or **Split** downloads `index.html`, `styles.css`, and `app.js` (inline styles and scripts are extracted into the separate files)
 
 To refine a single section after generation, open the sidebar, pick a section from the "Regenerate section" dropdown, and press **Regenerate section**. The selected block is regenerated in place while the rest of the page stays untouched.
 
