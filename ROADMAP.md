@@ -20,6 +20,7 @@ Build the most reliable minimal web builder for self-contained, beautiful, respo
 - Generation profiles: `profiles/*.json` bundle tone, complexity, strict mode, and extra prompt guidance; a "Custom" option restores manual controls.
 - Template memory: save the current page to a local `templates/` dir and seed a fresh conversation from any saved template.
 - Observability: structured JSON events (latency, output size, failures) via the `minimal_web_builder` logger, with an opt-in local JSONL analytics hook (`ANALYTICS_FILE`).
+- Refine mode: regenerate a section focused on a single aspect (spacing, typography, layout, or color).
 - ~95% coverage on core non-UI modules; CI gates on lint + syntax + tests + coverage.
 
 ## Phase 1: Foundation ✅ (complete)
@@ -113,8 +114,8 @@ Potential additions that preserve minimalism:
   - Users specify only constraints (sections, color limits, density), model fills details.
 - Layout DNA:
   - Extract reusable layout grammar from accepted generations.
-- Refine mode:
-  - "Improve only spacing" or "Improve typography only" updates without major rewrites.
+- ✅ Refine mode:
+  - ✅ Aspect-focused section updates ("Improve only spacing / typography / layout / color") without major rewrites.
 - Safety rails:
   - Validate generated JS complexity and forbid unnecessary scripts.
 

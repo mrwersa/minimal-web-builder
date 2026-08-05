@@ -108,6 +108,60 @@ STRICT_MINIMAL_GUIDANCE = (
     "effects, and limit the page to the fewest sections needed to communicate clearly."
 )
 
+
+@dataclass(frozen=True)
+class RefineAspect:
+    key: str
+    label: str
+    guidance: str
+
+
+REFINE_ASPECTS = [
+    RefineAspect(
+        key="general",
+        label="General",
+        guidance=(
+            "Make a broad improvement while staying consistent with the rest of the page."
+        ),
+    ),
+    RefineAspect(
+        key="spacing",
+        label="Spacing",
+        guidance=(
+            "Adjust spacing only: padding, margins, gaps, and whitespace for better rhythm "
+            "and breathing room. Do not change colors, typography, or content."
+        ),
+    ),
+    RefineAspect(
+        key="typography",
+        label="Typography",
+        guidance=(
+            "Adjust typography only: font sizes, weights, line-height, letter-spacing, and "
+            "heading hierarchy. Do not change colors, spacing, or content."
+        ),
+    ),
+    RefineAspect(
+        key="layout",
+        label="Layout",
+        guidance=(
+            "Adjust layout only: the arrangement, ordering, alignment, and responsiveness of "
+            "the section's blocks. Do not change colors, typography, or content."
+        ),
+    ),
+    RefineAspect(
+        key="color",
+        label="Color",
+        guidance=(
+            "Adjust color only: palette, contrast, and accents while keeping WCAG AA contrast. "
+            "Do not change layout, typography, or content."
+        ),
+    ),
+]
+
+REFINE_ASPECTS_BY_KEY: dict[str, RefineAspect] = {a.key: a for a in REFINE_ASPECTS}
+
+DEFAULT_REFINE_ASPECT_KEY = "general"
+
 # Shared UI design tokens (Streamlit theme consistency).
 COLORS = {
     "bg": "#f7f9fb",

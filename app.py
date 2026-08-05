@@ -51,6 +51,8 @@ from src.templates import (
 )
 from src.theme import (
     COMPLEXITY_BY_KEY,
+    REFINE_ASPECTS,
+    REFINE_ASPECTS_BY_KEY,
     TONE_PRESETS_BY_KEY,
     complexity_options,
     tone_options,
@@ -178,6 +180,12 @@ with st.sidebar:
                 options=list(range(len(sections))),
                 format_func=lambda i: section_labels[i],
                 key="section_choice",
+            )
+            st.selectbox(
+                "Refine focus",
+                options=[a.key for a in REFINE_ASPECTS],
+                format_func=lambda key: REFINE_ASPECTS_BY_KEY[key].label,
+                key="refine_aspect",
             )
             if st.button("Regenerate section"):
                 request_section_regeneration(
@@ -364,6 +372,7 @@ if st.session_state.is_regenerating_section:
         complexity_key=effective_complexity,
         extra_guidance=effective_guidance,
         analytics_file=config.analytics_file,
+        refine_aspect_key=st.session_state.get("refine_aspect"),
     )
 
     if output.startswith("API error:"):
