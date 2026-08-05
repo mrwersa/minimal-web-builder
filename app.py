@@ -90,7 +90,7 @@ gemini_model = genai.GenerativeModel(model)
 PROFILES_DIR = Path(__file__).resolve().parent / "profiles"
 try:
     PROFILES = load_profiles(PROFILES_DIR)
-except ValueError as exc:
+except (ValueError, TypeError) as exc:
     st.error(f"Failed to load generation profiles: {exc}")
     PROFILES = []
 
