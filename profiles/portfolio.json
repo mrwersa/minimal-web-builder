@@ -1,0 +1,8 @@
+{
+  "label": "Portfolio",
+  "description": "Personal creative portfolio with strong typographic moments and restrained accent color.",
+  "tone_key": "portfolio",
+  "complexity_key": "balanced",
+  "strict_minimal": false,
+  "extra_guidance": "Sections: hero or intro, a selected-work grid, about, and contact. Emphasize the work with large SVG placeholders and a single restrained accent color."
+}

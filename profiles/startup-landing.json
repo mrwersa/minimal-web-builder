@@ -1,0 +1,8 @@
+{
+  "label": "Startup Landing",
+  "description": "High-converting landing page with hero, features, pricing, and a final call-to-action.",
+  "tone_key": "landing",
+  "complexity_key": "detailed",
+  "strict_minimal": false,
+  "extra_guidance": "Structure the page as: hero with a clear value proposition and primary call-to-action, a features or social-proof band, pricing tiers, and a final sign-up call-to-action. Keep the copy crisp and benefit-driven."
+}

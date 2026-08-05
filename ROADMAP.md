@@ -17,6 +17,7 @@ Build the most reliable minimal web builder for self-contained, beautiful, respo
 - Section-level regeneration: pick any top-level section and regenerate just that block in place.
 - App UI styled from the shared design-token palette; accessibility guardrails in the prompt plus a static audit of generated HTML (incl. visible focus styles).
 - Export modes: single `index.html` download or split export (`index.html` + `styles.css` + `app.js`).
+- Generation profiles: `profiles/*.json` bundle tone, complexity, strict mode, and extra prompt guidance; a "Custom" option restores manual controls.
 - ~95% coverage on core non-UI modules; CI gates on lint + syntax + tests + coverage.
 
 ## Phase 1: Foundation ✅ (complete)
@@ -88,9 +89,10 @@ Work items:
 - ✅ Project export modes:
   - ✅ Single HTML export (restored; `index.html` download in the Code tab).
   - ✅ Optional split export (index.html, styles.css, app.js) via `src/export.py`.
-- ⬜ Configurable generation profiles:
-  - ⬜ profiles/minimal.json (strict default).
-  - ⬜ profiles/startup-landing.json, profiles/portfolio.json.
+- ✅ Configurable generation profiles:
+  - ✅ profiles/minimal.json (strict default).
+  - ✅ profiles/startup-landing.json, profiles/portfolio.json.
+  - ✅ Profile selector in the sidebar; individual controls disabled while a profile is active.
 - ⬜ Template memory:
   - ⬜ Save successful outputs as reusable local templates.
   - ⬜ Let users seed new generations from a prior build.

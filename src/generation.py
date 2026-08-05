@@ -54,6 +54,7 @@ def build_generation_prompt(
     tone_key: str = DEFAULT_TONE_KEY,
     strict_minimal: bool = False,
     complexity_key: str = DEFAULT_COMPLEXITY_KEY,
+    extra_guidance: str = "",
 ) -> str:
     conversation = "\n".join(f"{m['role'].upper()}: {m['content']}" for m in messages)
     base_prompt = BASE_PROMPT
@@ -61,6 +62,8 @@ def build_generation_prompt(
     complexity = _complexity_guidance(complexity_key)
     if complexity:
         guidance = f"{guidance}\n{complexity}" if guidance else complexity
+    if extra_guidance:
+        guidance = f"{guidance}\n{extra_guidance}" if guidance else extra_guidance
     if guidance:
         base_prompt = f"{base_prompt}\n\nAdditional style constraints:\n{guidance}"
     return f"{base_prompt}\n\nConversation:\n{conversation}"
@@ -97,12 +100,14 @@ def build_section_regeneration_prompt(
     tone_key: str = DEFAULT_TONE_KEY,
     strict_minimal: bool = False,
     complexity_key: str = DEFAULT_COMPLEXITY_KEY,
+    extra_guidance: str = "",
 ) -> str:
     extra = "\n".join(
         part
         for part in (
             _style_guidance(tone_key, strict_minimal),
             _complexity_guidance(complexity_key),
+            extra_guidance,
         )
         if part
     )
@@ -148,12 +153,14 @@ def call_gemini(
     tone_key: str = DEFAULT_TONE_KEY,
     strict_minimal: bool = False,
     complexity_key: str = DEFAULT_COMPLEXITY_KEY,
+    extra_guidance: str = "",
 ) -> str:
     prompt = build_generation_prompt(
         messages,
         tone_key=tone_key,
         strict_minimal=strict_minimal,
         complexity_key=complexity_key,
+        extra_guidance=extra_guidance,
     )
     return _generate_content(model, genai, prompt, temperature, max_output_tokens)
 
@@ -169,6 +176,7 @@ def call_gemini_for_section(
     tone_key: str = DEFAULT_TONE_KEY,
     strict_minimal: bool = False,
     complexity_key: str = DEFAULT_COMPLEXITY_KEY,
+    extra_guidance: str = "",
 ) -> str:
     prompt = build_section_regeneration_prompt(
         current_code,
@@ -177,5 +185,6 @@ def call_gemini_for_section(
         tone_key=tone_key,
         strict_minimal=strict_minimal,
         complexity_key=complexity_key,
+        extra_guidance=extra_guidance,
     )
     return _generate_content(model, genai, prompt, temperature, max_output_tokens)
