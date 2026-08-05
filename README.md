@@ -53,7 +53,7 @@ A sleek, minimalist web application builder powered by Google Gemini AI. Create 
    ```
    GENERATION_PROVIDER=openrouter
    OPENROUTER_API_KEY=your_openrouter_api_key_here
-   OPENROUTER_MODEL=google/gemini-2.0-flash
+   OPENROUTER_MODEL=google/gemini-2.5-flash
    ```
    See `.env.example` for the full list of supported variables.
    Optional: set `ANALYTICS_FILE=data/events.jsonl` to append structured generation events (latency, output size, failures) as JSON lines to a local file.
