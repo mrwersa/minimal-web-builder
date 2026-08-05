@@ -4,9 +4,11 @@ from types import SimpleNamespace
 from src.generation import (
     BASE_PROMPT,
     build_generation_prompt,
+    build_section_regeneration_prompt,
     call_gemini,
     strip_html_code_fence,
 )
+from src.sections import PageSection
 from src.theme import DEFAULT_TONE_KEY, STRICT_MINIMAL_GUIDANCE
 
 
@@ -198,3 +200,63 @@ def test_call_gemini_without_analytics_file_writes_nothing(tmp_path) -> None:
     )
 
     assert not list(tmp_path.iterdir())
+
+
+def _section() -> PageSection:
+    return PageSection(
+        index=0,
+        tag="main",
+        snippet="x",
+        start=0,
+        end=len("<main>x</main>"),
+        html="<main>x</main>",
+    )
+
+
+def test_section_prompt_includes_refine_aspect_guidance() -> None:
+    prompt = build_section_regeneration_prompt(
+        "<html><body><main>x</main></body></html>",
+        _section(),
+        "tighten it up",
+        refine_aspect_key="spacing",
+    )
+
+    assert "Adjust spacing only" in prompt
+
+
+def test_section_prompt_omits_general_and_unknown_aspect_guidance() -> None:
+    plain = build_section_regeneration_prompt(
+        "<html><body><main>x</main></body></html>",
+        _section(),
+        "tighten it up",
+    )
+    general = build_section_regeneration_prompt(
+        "<html><body><main>x</main></body></html>",
+        _section(),
+        "tighten it up",
+        refine_aspect_key="general",
+    )
+    unknown = build_section_regeneration_prompt(
+        "<html><body><main>x</main></body></html>",
+        _section(),
+        "tighten it up",
+        refine_aspect_key="not-a-focus",
+    )
+
+    assert "Adjust " not in plain
+    assert general == plain
+    assert unknown == plain
+
+
+def test_section_prompt_refine_aspects_are_distinct() -> None:
+    prompts = [
+        build_section_regeneration_prompt(
+            "<html><body><main>x</main></body></html>",
+            _section(),
+            "change it",
+            refine_aspect_key=key,
+        )
+        for key in ("spacing", "typography", "layout", "color")
+    ]
+
+    assert len(set(prompts)) == len(prompts)

@@ -4,6 +4,8 @@ from src.theme import (
     COMPLEXITY_LEVELS,
     DEFAULT_COMPLEXITY_KEY,
     DEFAULT_TONE_KEY,
+    REFINE_ASPECTS,
+    REFINE_ASPECTS_BY_KEY,
     SPACING,
     STRICT_MINIMAL_GUIDANCE,
     TONE_PRESETS,
@@ -66,3 +68,10 @@ def test_complexity_levels_unique_and_keyed() -> None:
 
 def test_complexity_options_returns_ordered_keys() -> None:
     assert complexity_options() == [c.key for c in COMPLEXITY_LEVELS]
+
+
+def test_refine_aspects_include_expected_focuses() -> None:
+    keys = {a.key for a in REFINE_ASPECTS}
+    assert {"general", "spacing", "typography", "layout", "color"} <= keys
+    assert set(REFINE_ASPECTS_BY_KEY) == keys
+    assert all(a.guidance for a in REFINE_ASPECTS)

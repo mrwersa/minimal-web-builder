@@ -9,6 +9,7 @@ from src.theme import (
     COMPLEXITY_BY_KEY,
     DEFAULT_COMPLEXITY_KEY,
     DEFAULT_TONE_KEY,
+    REFINE_ASPECTS_BY_KEY,
     STRICT_MINIMAL_GUIDANCE,
     TONE_PRESETS_BY_KEY,
 )
@@ -95,6 +96,13 @@ SECTION_REGENERATION_INSTRUCTIONS = (
 )
 
 
+def _refine_aspect_guidance(refine_aspect_key: str | None) -> str:
+    aspect = REFINE_ASPECTS_BY_KEY.get(refine_aspect_key or "")
+    if aspect is None or aspect.key == "general":
+        return ""
+    return aspect.guidance
+
+
 def build_section_regeneration_prompt(
     current_code: str,
     section: PageSection,
@@ -103,12 +111,14 @@ def build_section_regeneration_prompt(
     strict_minimal: bool = False,
     complexity_key: str = DEFAULT_COMPLEXITY_KEY,
     extra_guidance: str = "",
+    refine_aspect_key: str | None = None,
 ) -> str:
     extra = "\n".join(
         part
         for part in (
             _style_guidance(tone_key, strict_minimal),
             _complexity_guidance(complexity_key),
+            _refine_aspect_guidance(refine_aspect_key),
             extra_guidance,
         )
         if part
@@ -216,6 +226,7 @@ def call_gemini_for_section(
     complexity_key: str = DEFAULT_COMPLEXITY_KEY,
     extra_guidance: str = "",
     analytics_file: str | None = None,
+    refine_aspect_key: str | None = None,
 ) -> str:
     prompt = build_section_regeneration_prompt(
         current_code,
@@ -225,6 +236,7 @@ def call_gemini_for_section(
         strict_minimal=strict_minimal,
         complexity_key=complexity_key,
         extra_guidance=extra_guidance,
+        refine_aspect_key=refine_aspect_key,
     )
     return _generate_content(
         model,
