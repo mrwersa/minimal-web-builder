@@ -3,6 +3,7 @@ import streamlit.components.v1 as components
 
 from src.a11y import audit_generated_html
 from src.config import load_config
+from src.export import split_document
 from src.generation import (
     call_gemini,
     call_gemini_for_section,
@@ -166,6 +167,49 @@ if st.session_state.last_app_code:
             st.markdown(PREVIEW_LOADER_OVERLAY_HTML, unsafe_allow_html=True)
         st.markdown("</div>", unsafe_allow_html=True)
     with tab2:
+        export_mode = st.radio(
+            "Export format",
+            options=["Single HTML", "Split (index.html + styles.css + app.js)"],
+            horizontal=True,
+            key="export_format",
+        )
+        if export_mode == "Single HTML":
+            st.download_button(
+                "Download HTML",
+                data=preview_code,
+                file_name="index.html",
+                mime="text/html",
+            )
+        else:
+            split = split_document(preview_code)
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                st.download_button(
+                    "index.html",
+                    data=split.index_html,
+                    file_name="index.html",
+                    mime="text/html",
+                )
+            with col2:
+                if split.styles_css:
+                    st.download_button(
+                        "styles.css",
+                        data=split.styles_css,
+                        file_name="styles.css",
+                        mime="text/css",
+                    )
+                else:
+                    st.caption("No CSS to export")
+            with col3:
+                if split.app_js:
+                    st.download_button(
+                        "app.js",
+                        data=split.app_js,
+                        file_name="app.js",
+                        mime="text/javascript",
+                    )
+                else:
+                    st.caption("No JS to export")
         st.code(preview_code, language="html")
 else:
     with tab1:
