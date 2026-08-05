@@ -11,6 +11,7 @@ from src.generation import (
     call_gemini_for_section,
     strip_html_code_fence,
 )
+from src.js_analysis import audit_inline_scripts
 from src.profiles import (
     CUSTOM_PROFILE_ID,
     get_profile,
@@ -394,6 +395,9 @@ if st.session_state.is_regenerating_section:
     a11y_notes = audit_generated_html(updated_code)
     if a11y_notes:
         st.info("Accessibility notes: " + " ".join(a11y_notes))
+    js_notes = audit_inline_scripts(updated_code)
+    if js_notes:
+        st.info("JavaScript notes: " + " ".join(js_notes))
 
     apply_section_regeneration_result(st.session_state, updated_code)
     st.rerun()
@@ -427,6 +431,9 @@ if st.session_state.is_generating:
     a11y_notes = audit_generated_html(strip_html_code_fence(sanitized_output))
     if a11y_notes:
         st.info("Accessibility notes: " + " ".join(a11y_notes))
+    js_notes = audit_inline_scripts(strip_html_code_fence(sanitized_output))
+    if js_notes:
+        st.info("JavaScript notes: " + " ".join(js_notes))
 
     # Update session state with results
     apply_generation_result(st.session_state, sanitized_output)

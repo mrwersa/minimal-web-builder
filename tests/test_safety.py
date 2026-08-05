@@ -38,6 +38,19 @@ def test_neutralizes_dangerous_url_attributes() -> None:
     assert any("neutralized" in a.lower() for a in alerts)
 
 
+def test_removes_empty_inline_script_but_keeps_real_one() -> None:
+    raw = (
+        "<script>  </script><script>var a = 1;</script>"
+        '<script type="application/ld+json">{"@context": "x"}</script>'
+    )
+    sanitized, alerts = apply_output_safety_policy(raw)
+
+    assert "<script>  </script>" not in sanitized
+    assert "var a = 1;" in sanitized
+    assert "application/ld+json" in sanitized
+    assert any("empty script" in a.lower() for a in alerts)
+
+
 def test_keeps_safe_html_unchanged() -> None:
     raw = "<section><h1>Hello</h1><p>World</p></section>"
     sanitized, alerts = apply_output_safety_policy(raw)

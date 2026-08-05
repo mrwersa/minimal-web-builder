@@ -21,6 +21,7 @@ Build the most reliable minimal web builder for self-contained, beautiful, respo
 - Template memory: save the current page to a local `templates/` dir and seed a fresh conversation from any saved template.
 - Observability: structured JSON events (latency, output size, failures) via the `minimal_web_builder` logger, with an opt-in local JSONL analytics hook (`ANALYTICS_FILE`).
 - Refine mode: regenerate a section focused on a single aspect (spacing, typography, layout, or color).
+- Safety rails: empty inline `<script>` blocks are stripped by the output policy; inline scripts are audited for complexity and unsafe calls (`eval`, `new Function`, `document.write`).
 - ~95% coverage on core non-UI modules; CI gates on lint + syntax + tests + coverage.
 
 ## Phase 1: Foundation ✅ (complete)
@@ -116,8 +117,9 @@ Potential additions that preserve minimalism:
   - Extract reusable layout grammar from accepted generations.
 - ✅ Refine mode:
   - ✅ Aspect-focused section updates ("Improve only spacing / typography / layout / color") without major rewrites.
-- Safety rails:
-  - Validate generated JS complexity and forbid unnecessary scripts.
+- ✅ Safety rails:
+  - ✅ Validate generated JS complexity (statement/line heuristics) and flag unsafe calls.
+  - ✅ Forbid unnecessary scripts (empty inline `<script>` blocks stripped by the output policy).
 
 ## Engineering Principles
 
