@@ -1,6 +1,5 @@
-from pathlib import Path
 import sys
-
+from pathlib import Path
 
 # Ensure tests can import project modules when executed from any working directory.
 PROJECT_ROOT = Path(__file__).resolve().parent.parent

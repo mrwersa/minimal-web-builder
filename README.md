@@ -16,6 +16,7 @@ A sleek, minimalist web application builder powered by Google Gemini AI. Create 
 - Output complexity control (compact / balanced / detailed)
 - Optional strict minimal mode for flat, monochrome designs
 - Accessibility guardrails in generation + static audit of generated HTML
+- Iterative refinement: prior instructions are preserved so follow-up prompts build on the original request
 - Instant preview and code view
 - Input lock while generation is running
 - Self-contained output (no external frontend dependencies)
@@ -98,7 +99,7 @@ This repository uses PR-only governance on the main branch:
 - Conversation resolution is required before merge
 - Linear history is required
 - Force pushes and branch deletions are blocked
-- CI status check `ci / validate` (context: `validate`) is required
+- CI status checks `ci / validate` (context: `validate`) and `ci / lint` (context: `lint`) are required
 
 See:
 

@@ -45,7 +45,9 @@ def test_strict_minimal_guidance_defined() -> None:
 
 
 def test_design_tokens_have_expected_keys() -> None:
-    assert {"bg", "surface", "border", "text", "muted", "accent", "accent_soft"} <= set(COLORS)
+    assert {"bg", "surface", "border", "text", "muted", "accent", "accent_soft"} <= set(
+        COLORS
+    )
     assert {"xs", "sm", "md", "lg", "xl"} <= set(SPACING)
     assert {"sm", "base", "lg", "xl", "xxl"} <= set(TYPE_SCALE)
 

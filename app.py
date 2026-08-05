@@ -1,21 +1,17 @@
 import streamlit as st
 import streamlit.components.v1 as components
+
+from src.a11y import audit_generated_html
 from src.config import load_config
 from src.generation import call_gemini, strip_html_code_fence
-from src.a11y import audit_generated_html
-from src.theme import (
-    COMPLEXITY_BY_KEY,
-    TONE_PRESETS_BY_KEY,
-    complexity_options,
-    tone_options,
-)
 from src.rendering import (
-    build_sandboxed_preview_html,
     EMPTY_STATE_HTML,
     NO_CODE_PLACEHOLDER,
     PREVIEW_LOADER_OVERLAY_HTML,
+    build_sandboxed_preview_html,
     preview_container_class,
 )
+from src.safety import apply_output_safety_policy
 from src.state import (
     add_user_message_and_start_generation,
     apply_generation_error,
@@ -23,13 +19,20 @@ from src.state import (
     build_generation_messages,
     init_session_state,
 )
-from src.safety import apply_output_safety_policy
+from src.theme import (
+    COMPLEXITY_BY_KEY,
+    TONE_PRESETS_BY_KEY,
+    complexity_options,
+    tone_options,
+)
 from src.validation import validate_user_prompt
 
 try:
     import google.generativeai as genai
 except ModuleNotFoundError:
-    st.error("Module 'google.generativeai' not installed. Run `pip install google-generativeai`.")
+    st.error(
+        "Module 'google.generativeai' not installed. Run `pip install google-generativeai`."
+    )
     st.stop()
 
 # --- PAGE CONFIG ---
@@ -38,7 +41,7 @@ st.set_page_config(
     page_icon="🧩",
     layout="wide",
     initial_sidebar_state="collapsed",
-    menu_items={}
+    menu_items={},
 )
 
 # --- SESSION STATE ---
@@ -77,13 +80,18 @@ with st.sidebar:
         key="generation_complexity_slider",
         help="How much the generated page should include. Compact = minimal; Detailed = richer.",
     )
-    st.session_state.generation_complexity = complexity_options()[st.session_state.generation_complexity_slider - 1]
+    st.session_state.generation_complexity = complexity_options()[
+        st.session_state.generation_complexity_slider - 1
+    ]
     st.toggle("Strict minimal mode", key="strict_minimal_mode")
-    st.caption("Strict minimal mode restricts output to flat, monochrome, decoration-free designs.")
+    st.caption(
+        "Strict minimal mode restricts output to flat, monochrome, decoration-free designs."
+    )
 
 # --- FIRST REMOVE STREAMLIT DEFAULTS ---
 # This must come first to properly hide the default components
-st.markdown("""
+st.markdown(
+    """
 <style>
 /* Complete hiding of default Streamlit elements */
 #MainMenu, header, footer {display: none !important;}
@@ -109,10 +117,13 @@ section.main, .element-container {
     margin: 0 !important;
 }
 </style>
-""", unsafe_allow_html=True)
+""",
+    unsafe_allow_html=True,
+)
 
 # --- LAYOUT CSS (SEPARATE FROM STREAMLIT DEFAULTS) ---
-st.markdown("""
+st.markdown(
+    """
 <style>
 html, body, .stApp {
     margin: 0;
@@ -256,7 +267,9 @@ iframe {
     margin-top: 0 !important;
 }
 </style>
-""", unsafe_allow_html=True)
+""",
+    unsafe_allow_html=True,
+)
 
 # --- START APP LAYOUT ---
 
@@ -270,18 +283,21 @@ tab_labels = ["Preview", "Code"]
 tab1, tab2 = st.tabs(tab_labels)
 st.markdown('<div class="main-scroll-area">', unsafe_allow_html=True)
 st.markdown('<div class="sticky-tabs">', unsafe_allow_html=True)
-st.markdown('</div>', unsafe_allow_html=True)
+st.markdown("</div>", unsafe_allow_html=True)
 st.markdown('<div class="tab-content-scroll">', unsafe_allow_html=True)
 if st.session_state.last_app_code:
     preview_code = strip_html_code_fence(st.session_state.last_app_code)
     sandboxed_preview_html = build_sandboxed_preview_html(preview_code)
     with tab1:
         container_class = preview_container_class(st.session_state.is_generating)
-        st.markdown(f'<div class="{container_class}" style="position:relative;min-height:0;flex:1;">', unsafe_allow_html=True)
+        st.markdown(
+            f'<div class="{container_class}" style="position:relative;min-height:0;flex:1;">',
+            unsafe_allow_html=True,
+        )
         components.html(sandboxed_preview_html, height=500, scrolling=False)
         if st.session_state.is_generating:
             st.markdown(PREVIEW_LOADER_OVERLAY_HTML, unsafe_allow_html=True)
-        st.markdown('</div>', unsafe_allow_html=True)
+        st.markdown("</div>", unsafe_allow_html=True)
     with tab2:
         st.code(preview_code, language="html")
 else:
@@ -289,8 +305,8 @@ else:
         st.markdown(EMPTY_STATE_HTML, unsafe_allow_html=True)
     with tab2:
         st.code(NO_CODE_PLACEHOLDER, language="html")
-st.markdown('</div>', unsafe_allow_html=True)  # close tab-content-scroll
-st.markdown('</div>', unsafe_allow_html=True)  # close main-scroll-area
+st.markdown("</div>", unsafe_allow_html=True)  # close tab-content-scroll
+st.markdown("</div>", unsafe_allow_html=True)  # close main-scroll-area
 
 
 # --- FOOTER WITH CHAT INPUT ---
