@@ -50,14 +50,15 @@ A sleek, minimalist web application builder powered by Google Gemini AI. Create 
 ## Usage
 
 1. Once the app is running, you'll see a clean interface with a chat input at the bottom.
-2. Type a description of the website you want to create, for example:
+2. Open the sidebar to pick a tone preset (minimal, editorial, product, portfolio, landing) or toggle strict minimal mode. These apply to the next generation.
+3. Type a description of the website you want to create, for example:
    - "Create a landing page for a coffee shop with a hero section, menu, and contact form"
    - "Build a personal portfolio website with projects section and about me"
    - "Design a minimal blog homepage with featured posts"
-3. Press enter. While your site is being generated, the preview area will blur and a modern animated loader will appear above it. The chat input is disabled until generation is complete.
-4. Preview your website in the main area (full height up to the chat input)
-5. Use the "View Code" tab to see the HTML/CSS/JS
-6. Download the HTML file to use anywhere
+4. Press enter. While your site is being generated, the preview area will blur and a modern animated loader will appear above it. The chat input is disabled until generation is complete.
+5. Preview your website in the main area (full height up to the chat input)
+6. Use the "View Code" tab to see the HTML/CSS/JS
+7. Download the HTML file to use anywhere
 
 ## How It Works
 

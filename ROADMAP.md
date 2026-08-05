@@ -70,7 +70,7 @@ Work items:
   - ⬜ Keyboard navigation checks in generated templates.
 
 Exit criteria:
-- ✅ Reduced failed-generation rate (baseline established).
+- 🔄 Reduced failed-generation rate (validation + friendly errors + safety policy cut failure modes; rate not yet measured).
 - ⬜ Faster time-to-usable-result for first prompt.
 - ⬜ Documented visual system and generation presets.
 
