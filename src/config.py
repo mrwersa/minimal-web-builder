@@ -8,7 +8,7 @@ from dotenv import load_dotenv
 GEMINI_PROVIDER = "gemini"
 OPENROUTER_PROVIDER = "openrouter"
 DEFAULT_OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
-DEFAULT_OPENROUTER_MODEL = "google/gemini-2.0-flash"
+DEFAULT_OPENROUTER_MODEL = "google/gemini-2.5-flash"
 
 
 @dataclass(frozen=True)
@@ -49,8 +49,8 @@ def _str_env(name: str, default: str = "") -> str:
     return os.getenv(name, default).strip()
 
 
-def load_config() -> AppConfig:
-    load_dotenv()
+def load_config(dotenv_path: str | os.PathLike | None = None) -> AppConfig:
+    load_dotenv(dotenv_path)
     provider = _str_env("GENERATION_PROVIDER", GEMINI_PROVIDER).lower()
     if provider not in (GEMINI_PROVIDER, OPENROUTER_PROVIDER):
         provider = GEMINI_PROVIDER
