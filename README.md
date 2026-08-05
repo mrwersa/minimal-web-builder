@@ -92,7 +92,7 @@ This repository uses PR-only governance on the main branch:
 - Conversation resolution is required before merge
 - Linear history is required
 - Force pushes and branch deletions are blocked
-- CI status check `validate` is required
+- CI status check `ci / validate` (context: `validate`) is required
 
 See:
 
