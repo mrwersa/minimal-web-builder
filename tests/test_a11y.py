@@ -41,6 +41,11 @@ def test_allows_label_for_reference() -> None:
     assert audit_generated_html(html) == []
 
 
+def test_allows_label_for_after_control() -> None:
+    html = '<input type="email" id="email"><label for="email">Email</label>'
+    assert audit_generated_html(html) == []
+
+
 def test_flags_positive_tabindex() -> None:
     alerts = audit_generated_html('<input tabindex="5">')
     assert any("tabindex > 0" in a for a in alerts)

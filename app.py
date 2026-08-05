@@ -71,11 +71,13 @@ with st.sidebar:
     )
     st.select_slider(
         "Complexity",
-        options=complexity_options(),
-        format_func=lambda key: COMPLEXITY_BY_KEY[key].label,
-        key="generation_complexity",
+        options=[1, 2, 3],
+        format_func=lambda n: COMPLEXITY_BY_KEY[complexity_options()[n - 1]].label,
+        value=complexity_options().index(st.session_state.generation_complexity) + 1,
+        key="generation_complexity_slider",
         help="How much the generated page should include. Compact = minimal; Detailed = richer.",
     )
+    st.session_state.generation_complexity = complexity_options()[st.session_state.generation_complexity_slider - 1]
     st.toggle("Strict minimal mode", key="strict_minimal_mode")
     st.caption("Strict minimal mode restricts output to flat, monochrome, decoration-free designs.")
 
