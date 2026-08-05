@@ -15,6 +15,25 @@ Direct pushes to main are blocked by branch protection.
 
 ## Local Development
 
+There are two UIs. The **React + FastAPI** app is the active v2 platform; the
+Streamlit app remains as a fallback.
+
+### v2 (React + FastAPI) — recommended
+
+```bash
+pip install -r requirements.txt
+# terminal 1 — API
+uvicorn server.main:app --port 8000 --reload
+# terminal 2 — frontend
+cd web && npm install && npm run dev
+```
+
+Open http://localhost:5173. The Vite dev server proxies `/api` to the API on
+:8000. For production, `npm run build` writes `web/dist/` and the API serves it
+at http://localhost:8000/ (single process).
+
+### v1 (Streamlit) — fallback
+
 ```bash
 pip install -r requirements.txt
 streamlit run app.py

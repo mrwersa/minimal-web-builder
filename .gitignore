@@ -6,3 +6,9 @@ __pycache__/
 htmlcov/
 templates/
 layout_dna/
+
+# React frontend
+web/node_modules/
+web/dist/
+
+web/tsconfig.tsbuildinfo

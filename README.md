@@ -1,10 +1,11 @@
 # Minimal Web Builder
 
-A sleek, minimalist web application builder powered by Google Gemini AI. Create beautiful, responsive websites through natural language prompts with instant preview capabilities.
+A sleek, minimalist web application builder powered by AI (Gemini / OpenRouter). Create beautiful, responsive websites through natural language prompts with instant preview, WYSIWYG editing, and one-click export.
 
-![Minimal Web Builder](https://img.shields.io/badge/Minimal%20Web%20Builder-v1.0-blue)
-![Streamlit](https://img.shields.io/badge/Made%20with-Streamlit-FF4B4B)
-![Gemini AI](https://img.shields.io/badge/Powered%20by-Gemini%20AI-green)
+![Minimal Web Builder](https://img.shields.io/badge/Minimal%20Web%20Builder-v2.0-blue)
+![React](https://img.shields.io/badge/React-18-61DAFB)
+![FastAPI](https://img.shields.io/badge/FastAPI-0.41-009688)
+![Streamlit](https://img.shields.io/badge/also%20on-Streamlit-FF4B4B)
 
 ## Features
 
@@ -28,11 +29,38 @@ A sleek, minimalist web application builder powered by Google Gemini AI. Create 
 - Template memory: save the current page as a local template and reuse it to seed new generations
 - Structured API logging with an opt-in local analytics file
 - Instant preview and code view
+- WYSIWYG editing: click any element in the preview to edit its text and style it inline, then Apply to sync changes back into the page
 - Input lock while generation is running
 - Self-contained output (no external frontend dependencies)
 
 
 ## Setup
+
+There are two UIs: the new **React + FastAPI** app (v2, recommended) and the
+original **Streamlit** app (v1, kept as a fallback). Both share the same `src/`
+generation, safety, export, and template logic.
+
+### v2 — React + FastAPI (recommended)
+
+1. Install Python deps and the frontend:
+   ```bash
+   pip install -r requirements.txt
+   cd web && npm install
+   ```
+2. Create a `.env` with an API key (see below).
+3. Run both processes:
+   ```bash
+   # terminal 1: API
+   uvicorn server.main:app --port 8000 --reload
+   # terminal 2: frontend
+   cd web && npm run dev
+   ```
+4. Open http://localhost:5173 (the Vite dev server proxies `/api` to :8000).
+
+For a single-process production build, run `cd web && npm run build` then
+`uvicorn server.main:app --port 8000` and open http://localhost:8000/.
+
+### v1 — Streamlit (fallback)
 
 1. Clone this repository:
    ```bash
@@ -84,6 +112,8 @@ A sleek, minimalist web application builder powered by Google Gemini AI. Create 
 
 To refine a single section after generation, open the sidebar, pick a section from the "Regenerate section" dropdown, choose a **Refine focus** (General, Spacing, Typography, Layout, or Color), and press **Regenerate section**. The selected block is regenerated in place while the rest of the page stays untouched.
 
+To edit the generated page directly, turn on **WYSIWYG editing** in the sidebar (Refine section). Click any element in the preview to select it, type to edit its text, and use the floating toolbar to bold/italicize text, change its color, resize it, or delete it. Press **Apply** to sync the edits into the page (the Preview, Code, and export all update). Editing is paused while a generation is running.
+
 ## How It Works
 
 1. The application uses the Streamlit framework for the user interface
@@ -96,10 +126,20 @@ To refine a single section after generation, open the sidebar, pick a section fr
 
 ## Technologies
 
-- **Streamlit** - Python web app framework
-- **Google Generative AI** - Gemini model for code generation
-- **Python** - Backend language
-- **HTML/CSS/JS** - Output languages
+### v2 (React + FastAPI)
+- **React 18 + Vite + TypeScript** — single-page frontend
+- **Tailwind CSS** — styling, themed from the shared design tokens
+- **Zustand** — lightweight state
+- **FastAPI** — backend serving the existing `src/*` generation, safety, and export logic
+- **Python** — backend language
+- **uvicorn** — ASGI server
+
+### v1 (Streamlit, fallback)
+- **Streamlit** — Python web app framework
+
+### Shared (both UIs)
+- **Google Generative AI / OpenRouter** — Gemini model for code generation
+- **HTML/CSS/JS** — output languages
 
 ## Requirements
 
@@ -139,6 +179,7 @@ Highlights:
 - Phase 2: UX/design system and generation controls while staying minimal ✅ complete
 - Phase 3: Export modes, profiles, and product-grade reliability ✅ complete
 - Phase 4: Advanced minimal-builder ideas — constraint-first generation, refine mode, safety rails, and layout DNA ✅ complete
+- Phase 5: WYSIWYG editing (in-app direct manipulation of the generated page) 🔄 in progress
 
 ## Contributing
 
