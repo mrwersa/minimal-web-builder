@@ -96,3 +96,12 @@ def apply_section_regeneration_result(
 def apply_section_regeneration_error(state: MutableMapping[str, Any]) -> None:
     state["is_regenerating_section"] = False
     state["pending_section_index"] = None
+
+
+def seed_from_template(state: MutableMapping[str, Any], html: str) -> None:
+    """Start a fresh conversation seeded with an existing page as the baseline."""
+    state["messages"] = []
+    state["last_app_code"] = html
+    state["is_generating"] = False
+    state["is_regenerating_section"] = False
+    state["pending_section_index"] = None

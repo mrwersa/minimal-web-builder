@@ -41,6 +41,13 @@ from src.state import (
     init_session_state,
     last_user_message,
     request_section_regeneration,
+    seed_from_template,
+)
+from src.templates import (
+    delete_template,
+    list_templates,
+    load_template,
+    save_template,
 )
 from src.theme import (
     COMPLEXITY_BY_KEY,
@@ -93,6 +100,9 @@ try:
 except (ValueError, TypeError) as exc:
     st.error(f"Failed to load generation profiles: {exc}")
     PROFILES = []
+
+# --- TEMPLATE MEMORY ---
+TEMPLATES_DIR = Path(__file__).resolve().parent / "templates"
 
 # --- GENERATION OPTIONS (SIDEBAR) ---
 with st.sidebar:
@@ -254,6 +264,49 @@ if st.session_state.last_app_code:
                     )
                 else:
                     st.caption("No JS to export")
+
+        st.markdown("#### Templates")
+        template_name = st.text_input(
+            "Save current page as a template",
+            placeholder="my-page",
+            key="template_name_input",
+        )
+        if st.button("Save template"):
+            if template_name.strip():
+                try:
+                    saved = save_template(TEMPLATES_DIR, template_name, preview_code)
+                    st.success(f"Saved template '{saved.stem}'.")
+                    st.rerun()
+                except ValueError as exc:
+                    st.error(str(exc))
+            else:
+                st.warning("Enter a template name first.")
+
+        available = list_templates(TEMPLATES_DIR)
+        if available:
+            template_choice = st.selectbox(
+                "Start from a saved template",
+                options=available,
+                key="template_choice",
+            )
+            col1, col2 = st.columns(2)
+            with col1:
+                if st.button("Use template"):
+                    try:
+                        seed_from_template(
+                            st.session_state,
+                            load_template(TEMPLATES_DIR, template_choice),
+                        )
+                        st.rerun()
+                    except FileNotFoundError:
+                        st.error("Template no longer exists.")
+            with col2:
+                if st.button("Delete template"):
+                    delete_template(TEMPLATES_DIR, template_choice)
+                    st.rerun()
+        else:
+            st.caption("No saved templates yet.")
+
         st.code(preview_code, language="html")
 else:
     with tab1:

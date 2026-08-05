@@ -9,6 +9,7 @@ from src.state import (
     init_session_state,
     last_user_message,
     request_section_regeneration,
+    seed_from_template,
 )
 
 
@@ -138,3 +139,21 @@ def test_section_regeneration_error_resets_state_and_keeps_code() -> None:
     assert state["is_regenerating_section"] is False
     assert state["pending_section_index"] is None
     assert state["last_app_code"] == "<div>keep</div>"
+
+
+def test_seed_from_template_starts_fresh_conversation() -> None:
+    state = {
+        "messages": [{"role": "user", "content": "old"}],
+        "last_app_code": "<div>old</div>",
+        "is_generating": True,
+        "is_regenerating_section": True,
+        "pending_section_index": 3,
+    }
+
+    seed_from_template(state, "<main>new</main>")
+
+    assert state["messages"] == []
+    assert state["last_app_code"] == "<main>new</main>"
+    assert state["is_generating"] is False
+    assert state["is_regenerating_section"] is False
+    assert state["pending_section_index"] is None
