@@ -120,7 +120,7 @@ with st.sidebar:
             ]
             st.selectbox(
                 "Regenerate section",
-                options=range(len(sections)),
+                options=list(range(len(sections))),
                 format_func=lambda i: section_labels[i],
                 key="section_choice",
             )

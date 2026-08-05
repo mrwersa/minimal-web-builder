@@ -5,7 +5,8 @@ from html.parser import HTMLParser
 
 SNIPPET_MAX_CHARS = 72
 
-_WRAPPER_TAGS = ("html", "head", "body")
+_WRAPPER_TAGS = ("html", "body")
+_SKIP_TAGS = ("head", "script", "style", "noscript", "template")
 
 
 @dataclass(frozen=True)
@@ -85,32 +86,56 @@ class _SectionScanner(HTMLParser):
             self._close_section(tag, self._offset() + len(f"</{tag}>"))
 
 
-def extract_sections(html: str) -> list[PageSection]:
-    """Extract the top-level element sections of a page with exact source ranges."""
+def _unwrap(section: PageSection) -> str:
+    """Return the inner content of a section, tolerating attributes on the open tag."""
+    open_end = section.html.index(">") + 1
+    close = f"</{section.tag}>"
+    return section.html[open_end : len(section.html) - len(close)]
+
+
+def _flatten(html: str, base: int) -> list[PageSection]:
+    """Extract meaningful content sections, translating offsets to the full document."""
     scanner = _SectionScanner(html)
     scanner.feed(html)
-    return scanner.sections
+    result: list[PageSection] = []
+    for section in scanner.sections:
+        if section.tag in _WRAPPER_TAGS:
+            inner = _unwrap(section)
+            inner_base = base + section.start + (section.html.index(">") + 1)
+            result.extend(_flatten(inner, inner_base))
+        elif section.tag in _SKIP_TAGS:
+            continue
+        else:
+            result.append(
+                PageSection(
+                    index=len(result),
+                    tag=section.tag,
+                    snippet=section.snippet,
+                    start=base + section.start,
+                    end=base + section.end,
+                    html=section.html,
+                )
+            )
+    return result
+
+
+def extract_sections(html: str) -> list[PageSection]:
+    """Extract the meaningful top-level sections of a page with exact source ranges.
+
+    Unwraps ``<html>``/``<body>`` containers and skips ``<head>``, ``<script>``,
+    and other non-content subtrees, so hero/card/footer blocks surface as pickable
+    sections while offsets remain usable against the original document.
+    """
+    return _flatten(html, 0)
 
 
 def replace_section(html: str, section: PageSection, replacement: str) -> str:
     return html[: section.start] + replacement + html[section.end :]
 
 
-def _unwrap(section: PageSection) -> str:
-    tag = section.tag
-    open_len = len(f"<{tag}>")
-    close = f"</{tag}>"
-    return section.html[open_len : len(section.html) - len(close)]
-
-
 def extract_first_top_level(html: str) -> str | None:
-    """Return the first meaningful top-level element, skipping html/head/body wrappers."""
+    """Return the first meaningful top-level element, skipping wrappers."""
     sections = extract_sections(html)
-    for section in sections:
-        if section.tag not in _WRAPPER_TAGS:
-            return section.html
-    for section in sections:
-        result = extract_first_top_level(_unwrap(section))
-        if result:
-            return result
+    if sections:
+        return sections[0].html
     return None

@@ -58,6 +58,52 @@ def test_extract_sections_single_line_html() -> None:
     assert sections[1].html == "<section>b</section>"
 
 
+def test_extract_sections_unwraps_wrappers_with_absolute_offsets() -> None:
+    html = (
+        "<html><head><title>t</title></head><body>"
+        "<header><h1>Hi</h1></header><main><p>x</p></main></body></html>"
+    )
+    sections = extract_sections(html)
+
+    assert [s.tag for s in sections] == ["header", "main"]
+    assert "Hi" in sections[0].snippet
+    for section in sections:
+        assert section.html == html[section.start : section.end]
+
+
+def test_extract_sections_skips_head_script_and_style() -> None:
+    html = (
+        "<html><head><style>h1{}</style></head><body>"
+        "<header>one</header><script>var a = 1;</script></body></html>"
+    )
+    sections = extract_sections(html)
+
+    assert [s.tag for s in sections] == ["header"]
+
+
+def test_extract_sections_tolerates_attributes_on_wrapper() -> None:
+    html = '<html lang="en"><body style="margin:0"><header>one</header></body></html>'
+    sections = extract_sections(html)
+
+    assert [s.tag for s in sections] == ["header"]
+    assert sections[0].html == html[sections[0].start : sections[0].end]
+
+
+def test_replace_section_on_wrapped_page() -> None:
+    html = (
+        "<html><head><title>t</title></head><body>"
+        "<header>old</header><main>body</main></body></html>"
+    )
+    sections = extract_sections(html)
+
+    updated = replace_section(html, sections[0], "<header>new</header>")
+
+    assert "<header>old</header>" not in updated
+    assert "<header>new</header>" in updated
+    assert "<main>body</main>" in updated
+    assert html.startswith("<html>") and updated.endswith("</html>")
+
+
 def test_extract_sections_handles_self_closing_inside_section() -> None:
     html = "<main><img src='x'/>text</main><footer>f</footer>"
     sections = extract_sections(html)
