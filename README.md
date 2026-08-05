@@ -28,6 +28,7 @@ A sleek, minimalist web application builder powered by Google Gemini AI. Create 
 - Template memory: save the current page as a local template and reuse it to seed new generations
 - Structured API logging with an opt-in local analytics file
 - Instant preview and code view
+- WYSIWYG editing: click any element in the preview to edit its text and style it inline, then Apply to sync changes back into the page
 - Input lock while generation is running
 - Self-contained output (no external frontend dependencies)
 
@@ -84,6 +85,8 @@ A sleek, minimalist web application builder powered by Google Gemini AI. Create 
 
 To refine a single section after generation, open the sidebar, pick a section from the "Regenerate section" dropdown, choose a **Refine focus** (General, Spacing, Typography, Layout, or Color), and press **Regenerate section**. The selected block is regenerated in place while the rest of the page stays untouched.
 
+To edit the generated page directly, turn on **WYSIWYG editing** in the sidebar (Refine section). Click any element in the preview to select it, type to edit its text, and use the floating toolbar to bold/italicize text, change its color, resize it, or delete it. Press **Apply** to sync the edits into the page (the Preview, Code, and export all update). Editing is paused while a generation is running.
+
 ## How It Works
 
 1. The application uses the Streamlit framework for the user interface
@@ -139,6 +142,7 @@ Highlights:
 - Phase 2: UX/design system and generation controls while staying minimal ✅ complete
 - Phase 3: Export modes, profiles, and product-grade reliability ✅ complete
 - Phase 4: Advanced minimal-builder ideas — constraint-first generation, refine mode, safety rails, and layout DNA ✅ complete
+- Phase 5: WYSIWYG editing (in-app direct manipulation of the generated page) 🔄 in progress
 
 ## Contributing
 

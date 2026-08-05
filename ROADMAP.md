@@ -124,6 +124,34 @@ Potential additions that preserve minimalism:
   - ✅ Validate generated JS complexity (statement/line heuristics) and flag unsafe calls.
   - ✅ Forbid unnecessary scripts (empty inline `<script>` blocks stripped by the output policy).
 
+## Phase 5: WYSIWYG editing 🔄 (in progress)
+
+Goals:
+- Let users directly manipulate the generated page (the NaturalMash mixed-initiative model):
+  natural language produces the page, direct manipulation refines it.
+- Keep the backend (generation, safety, audit, export) unchanged.
+
+Inspiration: Aghaee, *End-User Development of Mashups Using Live Natural Language Programming*
+(USI Lugano, 2014) — a hybrid EUD technique combining natural-language programming with a
+WYSIWYG interface and live programming.
+
+Work items:
+- ✅ Custom Streamlit component (`frontend/wysiwyg/`) hosting a sandboxed, editable preview
+  iframe with a vendored Streamlit component protocol (no build step, no CDN).
+- ✅ Editor shim injected into the preview: click-to-select, inline text editing
+  (contentEditable), bold/italic, text color, font size, delete element, and Apply.
+- ✅ Edit-sync bridge: editing returns the updated document; `consume_edit_message` applies it
+  to `last_app_code` (nonce-guarded against replay), so Preview, Code, and export stay in sync.
+- ✅ App integration: sidebar "WYSIWYG editing" toggle; editing auto-disabled while generating.
+- ✅ Tests for the WYSIWYG helpers and a headless `AppTest` smoke test of `app.py`.
+- ⬜ Element-scoped AI refinement: select an element + describe a change; regenerate just that
+  element in place (mixed-initiative NL command scoped to the selection).
+- ⬜ Live programming: debounced auto-apply as you edit (DOM&#8596;code sync) with undo/redo.
+
+Exit criteria (so far):
+- ✅ Users can edit the generated page in place and sync edits back without touching code.
+- ⬜ Element-scoped AI refinement ships as a follow-up increment.
+
 ## Engineering Principles
 
 - Minimal surface area, maximal clarity.

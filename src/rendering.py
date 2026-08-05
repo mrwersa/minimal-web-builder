@@ -66,20 +66,43 @@ EMPTY_STATE_HTML = """
 NO_CODE_PLACEHOLDER = "<!-- No code generated yet -->"
 
 
-def build_sandboxed_preview_html(generated_html: str) -> str:
-    # Constrain generated output to a sandboxed iframe with a restrictive CSP.
-    srcdoc_document = (
+_PREVIEW_CSP = (
+    "default-src 'none'; img-src data: blob:; style-src 'unsafe-inline'; "
+    "script-src 'unsafe-inline'; font-src data:; connect-src 'none'; "
+    "frame-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none';"
+)
+
+# Sentinel meta tag used to strip the preview's injected CSP from export markup.
+PREVIEW_CSP_META = (
+    '<meta http-equiv="Content-Security-Policy" content="'
+    "default-src 'none'; img-src data: blob:; style-src 'unsafe-inline'; script-src 'unsafe-inline'; "
+    "font-src data:; connect-src 'none'; frame-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none';"
+    '">'
+)
+
+
+def build_preview_document(generated_html: str) -> str:
+    """Wrap generated output in a sandboxed document with a restrictive CSP.
+
+    The returned string is the srcdoc *document* (not an <iframe> element), so it
+    can be assigned to an iframe's ``srcdoc`` property or used inside a custom
+    component. Editors may inject an additional shim into this document.
+    """
+    return (
         "<!doctype html>"
         "<html><head>"
         '<meta charset="utf-8">'
         '<meta name="viewport" content="width=device-width, initial-scale=1">'
-        '<meta http-equiv="Content-Security-Policy" '
-        "content=\"default-src 'none'; img-src data: blob:; style-src 'unsafe-inline'; script-src 'unsafe-inline'; "
-        "font-src data:; connect-src 'none'; frame-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none';\">"
+        f'<meta http-equiv="Content-Security-Policy" content="{_PREVIEW_CSP}">'
         '</head><body style="margin:0;padding:0;">'
         f"{generated_html}"
         "</body></html>"
     )
+
+
+def build_sandboxed_preview_html(generated_html: str) -> str:
+    # Constrain generated output to a sandboxed iframe with a restrictive CSP.
+    srcdoc_document = build_preview_document(generated_html)
     escaped_srcdoc = html.escape(srcdoc_document, quote=True)
     return (
         "<iframe "
@@ -108,164 +131,78 @@ _APP_STYLES_TEMPLATE = """
 [data-testid="stToolbar"] {display: none !important;}
 .viewerBadge_container__1QSob {display: none !important;}
 
-/* Remove ALL padding and margins */
-.block-container {
-    padding: 0 !important;
-    margin: 0 !important;
-    max-width: 100% !important;
-}
-
-/* Fix gaps */
-div[data-testid="stVerticalBlock"] {
-    gap: 0 !important;
-}
-
-/* Remove padding from every element */
-section.main, .element-container {
-    padding: 0 !important;
-    margin: 0 !important;
-}
-
+/* Base theme */
 html, body, .stApp {
     margin: 0;
     padding: 0;
-    height: 100vh;
-    overflow-x: hidden;
     background: $bg;
+    color: $text;
 }
-.app-frame {
-    min-height: 100vh;
-    display: flex;
-    flex-direction: column;
+
+[data-testid="stMainBlockContainer"] {
+    padding: 2rem 2.5rem 7rem !important;
+    max-width: 1280px;
+    margin: 0 auto;
 }
-.main-scroll-area {
-    flex: 1 1 auto;
-    display: flex;
-    flex-direction: column;
-    align-items: stretch;
-    justify-content: flex-start;
-    padding: 0;
-    margin: 0;
+
+/* Tabs */
+[data-testid="stTabs"] {
+    background: $surface;
+    border: 1px solid $border;
+    border-radius: 12px 12px 0 0;
+    border-bottom: 1.5px solid $border;
+    padding: 0 12px;
+}
+[data-testid="stTab"] {
+    font-size: 1.05em;
+    font-weight: 500;
+    color: $muted;
+    padding: 10px 20px;
+    border-radius: 8px 8px 0 0;
+}
+[data-testid="stTab"]:hover {
+    color: $accent;
+}
+[data-testid="stTab"][aria-selected="true"] {
+    color: $accent;
+    box-shadow: inset 0 -2px 0 $accent;
+}
+
+/* Preview area */
+.preview-container {
+    width: 100%;
+    border: 1px solid $border;
+    border-radius: 12px;
     overflow: hidden;
     position: relative;
-    min-height: 0;
+    background: $surface;
 }
-.sticky-tabs {
-    position: sticky !important;
-    top: 0 !important;
-    z-index: 1002 !important;
+
+/* Chat input: Streamlit already pins it via stBottom, just restyle */
+[data-testid="stChatInput"] {
     background: $bg !important;
+    border-top: 1px solid $border;
+    padding: 8px 0;
 }
-.tab-content-scroll {
-    flex: 1 1 auto;
-    overflow-y: auto;
-    min-height: 0;
-    position: relative;
-    padding-bottom: 24px;
-}
-.stChatInput {
-    position: fixed !important;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    width: 100vw;
-    z-index: 2000;
-    background: $bg !important;
-    border-top: 1px solid #e9ecef;
-    margin: 0 !important;
-    padding: 0 20px;
-}
-.stChatInput > div {
-    margin: 0 !important;
-    padding: 0 !important;
-    background: $bg !important;
-    box-shadow: none !important;
-    border-radius: 0 !important;
-}
-.stChatInput input, .stChatInput textarea {
-    color: $text !important;
-    caret-color: $accent !important;
-    padding: 12px 16px !important;
-    font-size: 1.08em !important;
+[data-testid="stChatInput"] textarea {
     background: $surface !important;
     border: 1.5px solid $border !important;
-    border-radius: 0 !important;
+    border-radius: 24px !important;
+    color: $text !important;
+    caret-color: $accent !important;
     box-shadow: none !important;
-    outline: none !important;
-    transition: border-color 0.2s;
 }
-.stChatInput input:focus, .stChatInput textarea:focus {
-    border: 1.5px solid $accent !important;
-    outline: none !important;
+[data-testid="stChatInput"] textarea:focus {
+    border-color: $accent !important;
     background: $surface !important;
 }
-.stChatInput input::placeholder, .stChatInput textarea::placeholder {
+[data-testid="stChatInput"] textarea::placeholder {
     color: $muted !important;
     opacity: 1 !important;
 }
-.stChatInput input:disabled, .stChatInput textarea:disabled {
+[data-testid="stChatInput"] textarea:disabled {
     background: $bg !important;
     color: $disabled !important;
-}
-.preview-container {
-    width: 100%;
-    flex: 1 1 auto;
-    min-height: 0;
-    height: 100%;
-    display: flex;
-    flex-direction: column;
-    align-items: stretch;
-    justify-content: flex-start;
-}
-.status-indicator {
-    position: absolute;
-    left: 50%;
-    bottom: 80px;
-    transform: translateX(-50%);
-    background: rgba(255,255,255,0.95);
-    padding: 8px 16px;
-    border-radius: 20px;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.15);
-    font-size: 14px;
-    z-index: 1001;
-}
-.stButton, .stDownloadButton {
-    margin: 0 !important;
-}
-iframe {
-    width: 100vw !important;
-    max-width: 100% !important;
-    height: 100% !important;
-    min-height: 0 !important;
-    border: none !important;
-    display: block;
-    overflow: auto !important;
-}
-.stTabs [data-baseweb="tab-list"] {
-    background: $surface;
-    border-radius: 10px 10px 0 0;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.04);
-    border-bottom: 1.5px solid $border;
-    padding-left: 12px;
-}
-.stTabs [data-baseweb="tab"] {
-    font-size: 1.08em;
-    font-weight: 500;
-    color: $accent;
-    padding: 12px 24px 10px 24px;
-    margin-right: 2px;
-    border-radius: 10px 10px 0 0;
-    background: $bg;
-    transition: background 0.2s, color 0.2s;
-}
-.stTabs [aria-selected="true"] {
-    background: $accent !important;
-    color: $surface !important;
-    box-shadow: 0 2px 8px rgba(25,118,210,0.08);
-}
-.stTabs [data-baseweb="tab-panel"] {
-    padding-top: 0 !important;
-    margin-top: 0 !important;
 }
 """.strip()
 
