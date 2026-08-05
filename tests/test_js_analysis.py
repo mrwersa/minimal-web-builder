@@ -86,3 +86,11 @@ def test_inline_script_statement_count_skips_external_and_empty() -> None:
     html = "<script src='https://x/app.js'></script><script>  </script>"
 
     assert inline_script_statement_count(html) == 0
+
+
+def test_audit_flags_script_with_too_many_lines() -> None:
+    code = "<script>" + "\n".join("console.log('x')" for _ in range(201)) + "</script>"
+
+    alerts = audit_inline_scripts(code)
+
+    assert any("lines" in a for a in alerts)

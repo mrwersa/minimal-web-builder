@@ -122,6 +122,10 @@ def test_list_saved_dnas_skips_malformed_json(tmp_path) -> None:
     assert [name for name, _ in list_saved_dnas(tmp_path)] == ["main"]
 
 
+def test_list_saved_dnas_on_missing_dir(tmp_path) -> None:
+    assert list_saved_dnas(tmp_path / "does-not-exist") == []
+
+
 def test_from_dict_rejects_bad_data() -> None:
     with pytest.raises((TypeError, ValueError)):
         from_dict({"section_tags": 5})

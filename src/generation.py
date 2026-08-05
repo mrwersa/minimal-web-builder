@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 import time
 from typing import Any
 
@@ -13,6 +14,8 @@ from src.theme import (
     STRICT_MINIMAL_GUIDANCE,
     TONE_PRESETS_BY_KEY,
 )
+
+_LANGUAGE_FENCE_RE = re.compile(r"^[A-Za-z][A-Za-z0-9+#.-]*$")
 
 BASE_PROMPT = (
     "You are an expert web app developer and UI designer specializing in minimalist, clean designs.\n"
@@ -74,10 +77,11 @@ def build_generation_prompt(
 
 def strip_html_code_fence(text: str) -> str:
     stripped = text.strip()
-    if stripped.startswith("```html"):
-        stripped = stripped[len("```html") :].lstrip()
-    elif stripped.startswith("```"):
+    if stripped.startswith("```"):
         stripped = stripped[len("```") :].lstrip()
+        first_line, sep, rest = stripped.partition("\n")
+        if sep and _LANGUAGE_FENCE_RE.fullmatch(first_line):
+            stripped = rest
 
     if stripped.endswith("```"):
         stripped = stripped[:-3].rstrip()

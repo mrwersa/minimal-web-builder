@@ -70,6 +70,24 @@ def test_allows_neutral_or_negative_tabindex() -> None:
     )
 
 
+def test_non_numeric_tabindex_is_ignored_without_error() -> None:
+    alerts = audit_generated_html(_FOCUS_STYLE + '<input tabindex="abc">')
+    assert not any("tabindex > 0" in a for a in alerts)
+
+
+def test_flags_missing_focus_style_for_form_controls() -> None:
+    alerts = audit_generated_html('<input type="email" aria-label="Email">')
+    assert any("focus" in a for a in alerts)
+
+
+def test_allows_focus_style_for_form_controls() -> None:
+    html = (
+        _FOCUS_STYLE + '<input type="email" aria-label="Email">'
+        '<select aria-label="Plan"><option>Free</option></select>'
+    )
+    assert audit_generated_html(html) == []
+
+
 def test_self_closing_img_is_checked() -> None:
     alerts = audit_generated_html("<img src='x'/>")
     assert any("alt" in a for a in alerts)
