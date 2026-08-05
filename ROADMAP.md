@@ -19,6 +19,7 @@ Build the most reliable minimal web builder for self-contained, beautiful, respo
 - Export modes: single `index.html` download or split export (`index.html` + `styles.css` + `app.js`).
 - Generation profiles: `profiles/*.json` bundle tone, complexity, strict mode, and extra prompt guidance; a "Custom" option restores manual controls.
 - Template memory: save the current page to a local `templates/` dir and seed a fresh conversation from any saved template.
+- Observability: structured JSON events (latency, output size, failures) via the `minimal_web_builder` logger, with an opt-in local JSONL analytics hook (`ANALYTICS_FILE`).
 - ~95% coverage on core non-UI modules; CI gates on lint + syntax + tests + coverage.
 
 ## Phase 1: Foundation ✅ (complete)
@@ -97,9 +98,9 @@ Work items:
 - ✅ Template memory:
   - ✅ Save successful outputs as reusable local templates (`templates/`, git-ignored).
   - ✅ Let users seed new generations from a prior build (fresh conversation with the template as the baseline).
-- ⬜ Observability:
-  - ⬜ Structured logs around API latency and failures.
-  - ⬜ Lightweight analytics hooks (local-only, opt-in).
+- ✅ Observability:
+  - ✅ Structured logs around API latency and failures (`generation.success` / `generation.error` JSON events).
+  - ✅ Lightweight analytics hooks (local-only, opt-in via `ANALYTICS_FILE` JSONL).
 
 Exit criteria:
 - Repeatable workflow for build -> revise -> export.

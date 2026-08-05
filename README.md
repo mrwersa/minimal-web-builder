@@ -22,6 +22,7 @@ A sleek, minimalist web application builder powered by Google Gemini AI. Create 
 - Visible keyboard focus-state verification in generated templates
 - Export options: single `index.html` or split `index.html` + `styles.css` + `app.js`
 - Template memory: save the current page as a local template and reuse it to seed new generations
+- Structured API logging with an opt-in local analytics file
 - Instant preview and code view
 - Input lock while generation is running
 - Self-contained output (no external frontend dependencies)
@@ -44,6 +45,7 @@ A sleek, minimalist web application builder powered by Google Gemini AI. Create 
    ```
    GEMINI_API_KEY=your_gemini_api_key_here
    ```
+   Optional: set `ANALYTICS_FILE=data/events.jsonl` to append structured generation events (latency, output size, failures) as JSON lines to a local file.
 
 4. Run the application:
    ```bash
