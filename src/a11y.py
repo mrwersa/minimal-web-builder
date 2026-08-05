@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from html.parser import HTMLParser
+
+_INTERACTIVE_TAGS = ("a", "button", "input", "select", "textarea", "summary", "details")
 
 
 @dataclass
@@ -20,9 +23,14 @@ class _A11yScanner(HTMLParser):
         self._form_controls: list[_FormControl] = []
         self._images_without_alt = 0
         self._positive_tabindex = False
+        self._interactive_count = 0
+        self._style_content: list[str] = []
 
     def _inside_label(self) -> bool:
         return "label" in self._stack
+
+    def _inside_style(self) -> bool:
+        return "style" in self._stack
 
     @staticmethod
     def _attrs(attrs) -> dict[str, str]:
@@ -46,6 +54,8 @@ class _A11yScanner(HTMLParser):
                 _FormControl(tag, attrs_dict, self._inside_label())
             )
             self._check_tabindex(attrs_dict)
+        elif tag in _INTERACTIVE_TAGS or "tabindex" in attrs_dict:
+            self._interactive_count += 1
 
     def handle_startendtag(self, tag: str, attrs) -> None:
         self.handle_starttag(tag, attrs)
@@ -54,6 +64,10 @@ class _A11yScanner(HTMLParser):
     def handle_endtag(self, tag: str) -> None:
         if self._stack and self._stack[-1] == tag:
             self._stack.pop()
+
+    def handle_data(self, data: str) -> None:
+        if self._inside_style():
+            self._style_content.append(data)
 
     def _check_tabindex(self, attrs_dict: dict[str, str]) -> None:
         tabindex = attrs_dict.get("tabindex")
@@ -81,7 +95,16 @@ class _A11yScanner(HTMLParser):
                     f"Found a <{control.tag}> control without an accessible name "
                     "(add aria-label or a <label>)."
                 )
+        if self._interactive_count and not self._has_focus_style():
+            alerts.append(
+                "No visible keyboard focus styles detected; add :focus-visible styles "
+                "for interactive elements."
+            )
         return alerts
+
+    def _has_focus_style(self) -> bool:
+        css = "".join(self._style_content)
+        return re.search(r":focus(?:-visible)?(?:::[-\w]+)?\s*\{", css) is not None
 
     def _is_labelled(self, control: _FormControl) -> bool:
         attrs = control.attrs

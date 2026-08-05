@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from src.sections import PageSection
 from src.theme import (
     COMPLEXITY_BY_KEY,
     DEFAULT_COMPLEXITY_KEY,
@@ -77,23 +78,55 @@ def strip_html_code_fence(text: str) -> str:
     return stripped
 
 
-def call_gemini(
-    model: Any,
-    genai: Any,
-    messages: list[dict[str, str]],
-    temperature: float,
-    max_output_tokens: int,
+SECTION_REGENERATION_INSTRUCTIONS = (
+    "You are an expert web app developer and UI designer specializing in minimalist, clean designs.\n"
+    "You are iterating on a single-page website. Regenerate ONLY the section described below.\n"
+    "Rules:\n"
+    "- Return ONLY the replacement section as a single top-level HTML element using the same tag as the original.\n"
+    "- Match the existing class names, colors, and spacing so the section blends into the rest of the page.\n"
+    "- Follow the original design intent and accessibility best practices (WCAG AA contrast, visible focus states).\n"
+    "- ALL images/icons must be inline SVG; no external dependencies or CDN links.\n"
+    "- No explanations; code only."
+)
+
+
+def build_section_regeneration_prompt(
+    current_code: str,
+    section: PageSection,
+    instructions: str,
     tone_key: str = DEFAULT_TONE_KEY,
     strict_minimal: bool = False,
     complexity_key: str = DEFAULT_COMPLEXITY_KEY,
 ) -> str:
-    try:
-        prompt = build_generation_prompt(
-            messages,
-            tone_key=tone_key,
-            strict_minimal=strict_minimal,
-            complexity_key=complexity_key,
+    extra = "\n".join(
+        part
+        for part in (
+            _style_guidance(tone_key, strict_minimal),
+            _complexity_guidance(complexity_key),
         )
+        if part
+    )
+    prompt = (
+        SECTION_REGENERATION_INSTRUCTIONS
+        + "\n\nCurrent page code:\n"
+        + current_code
+        + f"\n\nSection to replace (position {section.index + 1}, <{section.tag}>):\n"
+        + section.html
+        + f"\n\nRegeneration instructions: {instructions or 'Match the existing design.'}"
+    )
+    if extra:
+        prompt += "\n\nStyle constraints:\n" + extra
+    return prompt
+
+
+def _generate_content(
+    model: Any,
+    genai: Any,
+    prompt: str,
+    temperature: float,
+    max_output_tokens: int,
+) -> str:
+    try:
         response = model.generate_content(
             prompt,
             generation_config=genai.types.GenerationConfig(
@@ -104,3 +137,45 @@ def call_gemini(
         return response.text
     except Exception as exc:  # noqa: BLE001 - surface any provider error as a friendly message
         return f"API error: {exc}"
+
+
+def call_gemini(
+    model: Any,
+    genai: Any,
+    messages: list[dict[str, str]],
+    temperature: float,
+    max_output_tokens: int,
+    tone_key: str = DEFAULT_TONE_KEY,
+    strict_minimal: bool = False,
+    complexity_key: str = DEFAULT_COMPLEXITY_KEY,
+) -> str:
+    prompt = build_generation_prompt(
+        messages,
+        tone_key=tone_key,
+        strict_minimal=strict_minimal,
+        complexity_key=complexity_key,
+    )
+    return _generate_content(model, genai, prompt, temperature, max_output_tokens)
+
+
+def call_gemini_for_section(
+    model: Any,
+    genai: Any,
+    current_code: str,
+    section: PageSection,
+    instructions: str,
+    temperature: float,
+    max_output_tokens: int,
+    tone_key: str = DEFAULT_TONE_KEY,
+    strict_minimal: bool = False,
+    complexity_key: str = DEFAULT_COMPLEXITY_KEY,
+) -> str:
+    prompt = build_section_regeneration_prompt(
+        current_code,
+        section,
+        instructions,
+        tone_key=tone_key,
+        strict_minimal=strict_minimal,
+        complexity_key=complexity_key,
+    )
+    return _generate_content(model, genai, prompt, temperature, max_output_tokens)

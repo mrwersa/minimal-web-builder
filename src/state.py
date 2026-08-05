@@ -12,6 +12,8 @@ def init_session_state(state: MutableMapping[str, Any]) -> None:
     state.setdefault("messages", [])
     state.setdefault("last_app_code", None)
     state.setdefault("is_generating", False)
+    state.setdefault("is_regenerating_section", False)
+    state.setdefault("pending_section_index", None)
     state.setdefault("show_preview", True)
     state.setdefault("generation_tone", DEFAULT_TONE_KEY)
     state.setdefault("strict_minimal_mode", False)
@@ -65,3 +67,32 @@ def apply_generation_error(state: MutableMapping[str, Any], error_message: str) 
         }
     )
     state["is_generating"] = False
+
+
+def last_user_message(state: MutableMapping[str, Any]) -> str:
+    for item in reversed(state.get("messages", [])):
+        if item.get("role") == "user":
+            return item.get("content", "")
+    return ""
+
+
+def request_section_regeneration(
+    state: MutableMapping[str, Any],
+    section_index: int,
+) -> None:
+    state["pending_section_index"] = section_index
+    state["is_regenerating_section"] = True
+
+
+def apply_section_regeneration_result(
+    state: MutableMapping[str, Any],
+    updated_code: str,
+) -> None:
+    state["last_app_code"] = updated_code
+    state["is_regenerating_section"] = False
+    state["pending_section_index"] = None
+
+
+def apply_section_regeneration_error(state: MutableMapping[str, Any]) -> None:
+    state["is_regenerating_section"] = False
+    state["pending_section_index"] = None
