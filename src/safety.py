@@ -1,18 +1,18 @@
 from __future__ import annotations
 
 import re
-from typing import List, Tuple
-
 
 DANGEROUS_CONTAINER_TAGS = ("iframe", "frame", "frameset", "object", "embed")
 URL_ATTRS = ("href", "src", "action", "formaction", "xlink:href")
 
 
-def _remove_dangerous_container_tags(html: str) -> Tuple[str, bool]:
+def _remove_dangerous_container_tags(html: str) -> tuple[str, bool]:
     updated = html
     changed = False
     for tag in DANGEROUS_CONTAINER_TAGS:
-        block_pattern = re.compile(rf"<{tag}\b[^>]*>.*?</{tag}\s*>", re.IGNORECASE | re.DOTALL)
+        block_pattern = re.compile(
+            rf"<{tag}\b[^>]*>.*?</{tag}\s*>", re.IGNORECASE | re.DOTALL
+        )
         single_pattern = re.compile(rf"<{tag}\b[^>]*?/?>", re.IGNORECASE | re.DOTALL)
 
         updated_next, n1 = block_pattern.subn("", updated)
@@ -22,7 +22,7 @@ def _remove_dangerous_container_tags(html: str) -> Tuple[str, bool]:
     return updated, changed
 
 
-def _remove_external_script_tags(html: str) -> Tuple[str, bool]:
+def _remove_external_script_tags(html: str) -> tuple[str, bool]:
     script_src_pattern = re.compile(
         r"<script\b(?=[^>]*\bsrc\s*=)[^>]*>.*?</script\s*>",
         re.IGNORECASE | re.DOTALL,
@@ -31,7 +31,7 @@ def _remove_external_script_tags(html: str) -> Tuple[str, bool]:
     return updated, count > 0
 
 
-def _remove_event_handler_attributes(html: str) -> Tuple[str, bool]:
+def _remove_event_handler_attributes(html: str) -> tuple[str, bool]:
     event_attr_pattern = re.compile(
         r"\s+on[a-zA-Z0-9_:-]+\s*=\s*(\"[^\"]*\"|'[^']*'|[^\s>]+)",
         re.IGNORECASE,
@@ -40,7 +40,7 @@ def _remove_event_handler_attributes(html: str) -> Tuple[str, bool]:
     return updated, count > 0
 
 
-def _neutralize_dangerous_url_attributes(html: str) -> Tuple[str, bool]:
+def _neutralize_dangerous_url_attributes(html: str) -> tuple[str, bool]:
     updated = html
     changed = False
     for attr in URL_ATTRS:
@@ -60,9 +60,9 @@ def _neutralize_dangerous_url_attributes(html: str) -> Tuple[str, bool]:
     return updated, changed
 
 
-def apply_output_safety_policy(generated_html: str) -> Tuple[str, List[str]]:
+def apply_output_safety_policy(generated_html: str) -> tuple[str, list[str]]:
     sanitized = generated_html
-    alerts: List[str] = []
+    alerts: list[str] = []
 
     sanitized, removed_containers = _remove_dangerous_container_tags(sanitized)
     if removed_containers:
@@ -78,6 +78,8 @@ def apply_output_safety_policy(generated_html: str) -> Tuple[str, List[str]]:
 
     sanitized, neutralized_urls = _neutralize_dangerous_url_attributes(sanitized)
     if neutralized_urls:
-        alerts.append("Neutralized dangerous javascript:/data:text/html URL attributes.")
+        alerts.append(
+            "Neutralized dangerous javascript:/data:text/html URL attributes."
+        )
 
     return sanitized, alerts

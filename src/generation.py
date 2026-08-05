@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, Dict, List
+from typing import Any
 
 from src.theme import (
     COMPLEXITY_BY_KEY,
@@ -32,7 +32,7 @@ BASE_PROMPT = (
 
 
 def _style_guidance(tone_key: str, strict_minimal: bool) -> str:
-    guidance: List[str] = []
+    guidance: list[str] = []
     preset = TONE_PRESETS_BY_KEY.get(tone_key)
     if preset is not None:
         guidance.append(f"Style direction: {preset.style_guidance}")
@@ -49,7 +49,7 @@ def _complexity_guidance(complexity_key: str) -> str:
 
 
 def build_generation_prompt(
-    messages: List[Dict[str, str]],
+    messages: list[dict[str, str]],
     tone_key: str = DEFAULT_TONE_KEY,
     strict_minimal: bool = False,
     complexity_key: str = DEFAULT_COMPLEXITY_KEY,
@@ -68,9 +68,9 @@ def build_generation_prompt(
 def strip_html_code_fence(text: str) -> str:
     stripped = text.strip()
     if stripped.startswith("```html"):
-        stripped = stripped[len("```html"):].lstrip()
+        stripped = stripped[len("```html") :].lstrip()
     elif stripped.startswith("```"):
-        stripped = stripped[len("```"):].lstrip()
+        stripped = stripped[len("```") :].lstrip()
 
     if stripped.endswith("```"):
         stripped = stripped[:-3].rstrip()
@@ -80,7 +80,7 @@ def strip_html_code_fence(text: str) -> str:
 def call_gemini(
     model: Any,
     genai: Any,
-    messages: List[Dict[str, str]],
+    messages: list[dict[str, str]],
     temperature: float,
     max_output_tokens: int,
     tone_key: str = DEFAULT_TONE_KEY,
@@ -102,5 +102,5 @@ def call_gemini(
             ),
         )
         return response.text
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 - surface any provider error as a friendly message
         return f"API error: {exc}"

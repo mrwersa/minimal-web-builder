@@ -1,8 +1,11 @@
 from __future__ import annotations
 
-from typing import Any, Dict, List, MutableMapping
+from collections.abc import MutableMapping
+from typing import Any
 
 from src.theme import DEFAULT_COMPLEXITY_KEY, DEFAULT_TONE_KEY
+
+MAX_INSTRUCTION_HISTORY = 8
 
 
 def init_session_state(state: MutableMapping[str, Any]) -> None:
@@ -23,8 +26,8 @@ def add_user_message_and_start_generation(
     state["is_generating"] = True
 
 
-def build_generation_messages(state: MutableMapping[str, Any]) -> List[Dict[str, str]]:
-    messages: List[Dict[str, str]] = []
+def build_generation_messages(state: MutableMapping[str, Any]) -> list[dict[str, str]]:
+    messages: list[dict[str, str]] = []
 
     last_app_code = state.get("last_app_code")
     if last_app_code:
@@ -35,10 +38,13 @@ def build_generation_messages(state: MutableMapping[str, Any]) -> List[Dict[str,
             }
         )
 
-    for item in reversed(state.get("messages", [])):
-        if item.get("role") == "user":
-            messages.append({"role": "user", "content": item.get("content", "")})
-            break
+    user_history = [
+        item.get("content", "")
+        for item in state.get("messages", [])
+        if item.get("role") == "user"
+    ]
+    for content in user_history[-MAX_INSTRUCTION_HISTORY:]:
+        messages.append({"role": "user", "content": content})
 
     return messages
 

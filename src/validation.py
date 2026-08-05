@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-from typing import Optional, Tuple
 
-
-def validate_user_prompt(prompt: str, max_prompt_chars: int) -> Tuple[Optional[str], Optional[str]]:
+def validate_user_prompt(
+    prompt: str, max_prompt_chars: int
+) -> tuple[str | None, str | None]:
     normalized = prompt.strip()
     if not normalized:
         return None, "Please enter a prompt before generating a website."

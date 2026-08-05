@@ -2,23 +2,22 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from html.parser import HTMLParser
-from typing import Dict, List, Set
 
 
 @dataclass
 class _FormControl:
     tag: str
-    attrs: Dict[str, str]
+    attrs: dict[str, str]
     inside_label: bool = False
 
 
 class _A11yScanner(HTMLParser):
     def __init__(self) -> None:
         super().__init__(convert_charrefs=True)
-        self._stack: List[str] = []
+        self._stack: list[str] = []
         self._h1_count = 0
-        self._label_for: Set[str] = set()
-        self._form_controls: List[_FormControl] = []
+        self._label_for: set[str] = set()
+        self._form_controls: list[_FormControl] = []
         self._images_without_alt = 0
         self._positive_tabindex = False
 
@@ -26,7 +25,7 @@ class _A11yScanner(HTMLParser):
         return "label" in self._stack
 
     @staticmethod
-    def _attrs(attrs) -> Dict[str, str]:
+    def _attrs(attrs) -> dict[str, str]:
         return {key: value for key, value in attrs}
 
     def handle_starttag(self, tag: str, attrs) -> None:
@@ -56,7 +55,7 @@ class _A11yScanner(HTMLParser):
         if self._stack and self._stack[-1] == tag:
             self._stack.pop()
 
-    def _check_tabindex(self, attrs_dict: Dict[str, str]) -> None:
+    def _check_tabindex(self, attrs_dict: dict[str, str]) -> None:
         tabindex = attrs_dict.get("tabindex")
         if tabindex is None:
             return
@@ -66,8 +65,8 @@ class _A11yScanner(HTMLParser):
         except ValueError:
             return
 
-    def finish(self) -> List[str]:
-        alerts: List[str] = []
+    def finish(self) -> list[str]:
+        alerts: list[str] = []
         if self._images_without_alt:
             alerts.append("Found an <img> without an alt attribute.")
         if self._h1_count > 1:
@@ -95,7 +94,7 @@ class _A11yScanner(HTMLParser):
         )
 
 
-def audit_generated_html(html: str) -> List[str]:
+def audit_generated_html(html: str) -> list[str]:
     """Run lightweight static accessibility checks on generated HTML."""
     scanner = _A11yScanner()
     scanner.feed(html)

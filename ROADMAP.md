@@ -64,7 +64,7 @@ Work items:
   - ✅ Optional strict minimal mode (fewer decorations).
   - ✅ Output complexity slider (compact / balanced / detailed).
 - ⬜ Prompt iteration UX:
-  - ⬜ Keep instruction history with concise diffs.
+  - ✅ Keep instruction history (last 8 user instructions are preserved across turns).
   - ⬜ Regenerate section-level variants (hero, cards, footer).
 - ✅ Accessibility checks:
   - ✅ Contrast guardrails in generation prompt (WCAG AA baseline).

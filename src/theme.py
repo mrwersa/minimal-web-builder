@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Dict
 
 
 @dataclass(frozen=True)
@@ -60,7 +59,7 @@ TONE_PRESETS = [
     ),
 ]
 
-TONE_PRESETS_BY_KEY: Dict[str, TonePreset] = {t.key: t for t in TONE_PRESETS}
+TONE_PRESETS_BY_KEY: dict[str, TonePreset] = {t.key: t for t in TONE_PRESETS}
 
 DEFAULT_TONE_KEY = "minimal"
 
@@ -99,7 +98,7 @@ COMPLEXITY_LEVELS = [
     ),
 ]
 
-COMPLEXITY_BY_KEY: Dict[str, ComplexityLevel] = {c.key: c for c in COMPLEXITY_LEVELS}
+COMPLEXITY_BY_KEY: dict[str, ComplexityLevel] = {c.key: c for c in COMPLEXITY_LEVELS}
 
 DEFAULT_COMPLEXITY_KEY = "balanced"
 

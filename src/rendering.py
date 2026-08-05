@@ -69,22 +69,22 @@ def build_sandboxed_preview_html(generated_html: str) -> str:
     srcdoc_document = (
         "<!doctype html>"
         "<html><head>"
-        "<meta charset=\"utf-8\">"
-        "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">"
-        "<meta http-equiv=\"Content-Security-Policy\" "
+        '<meta charset="utf-8">'
+        '<meta name="viewport" content="width=device-width, initial-scale=1">'
+        '<meta http-equiv="Content-Security-Policy" '
         "content=\"default-src 'none'; img-src data: blob:; style-src 'unsafe-inline'; script-src 'unsafe-inline'; "
         "font-src data:; connect-src 'none'; frame-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none';\">"
-        "</head><body style=\"margin:0;padding:0;\">"
+        '</head><body style="margin:0;padding:0;">'
         f"{generated_html}"
         "</body></html>"
     )
     escaped_srcdoc = html.escape(srcdoc_document, quote=True)
     return (
         "<iframe "
-        "sandbox=\"allow-scripts allow-forms\" "
-        "referrerpolicy=\"no-referrer\" "
-        f"srcdoc=\"{escaped_srcdoc}\" "
-        "style=\"width:100%;height:100%;border:0;background:#fff;\""
+        'sandbox="allow-scripts allow-forms" '
+        'referrerpolicy="no-referrer" '
+        f'srcdoc="{escaped_srcdoc}" '
+        'style="width:100%;height:100%;border:0;background:#fff;"'
         "></iframe>"
     )
 

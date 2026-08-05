@@ -7,7 +7,9 @@ def test_flags_img_without_alt() -> None:
 
 
 def test_allows_img_with_alt() -> None:
-    alerts = audit_generated_html('<img src="data:image/svg+xml;base64,AAA" alt="Logo">')
+    alerts = audit_generated_html(
+        '<img src="data:image/svg+xml;base64,AAA" alt="Logo">'
+    )
     assert alerts == []
 
 
