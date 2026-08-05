@@ -1,4 +1,9 @@
-from src.config import load_config
+from src.config import (
+    DEFAULT_OPENROUTER_MODEL,
+    GEMINI_PROVIDER,
+    OPENROUTER_PROVIDER,
+    load_config,
+)
 
 
 def test_load_config_reads_overrides(monkeypatch) -> None:
@@ -40,3 +45,48 @@ def test_load_config_analytics_file_defaults_none(monkeypatch) -> None:
     monkeypatch.delenv("ANALYTICS_FILE", raising=False)
 
     assert load_config().analytics_file is None
+
+
+def test_load_config_defaults_to_gemini_provider(monkeypatch) -> None:
+    monkeypatch.delenv("GENERATION_PROVIDER", raising=False)
+
+    cfg = load_config()
+
+    assert cfg.provider == GEMINI_PROVIDER
+    assert cfg.openrouter_api_key is None
+
+
+def test_load_config_reads_openrouter_settings(monkeypatch) -> None:
+    monkeypatch.setenv("GENERATION_PROVIDER", "openrouter")
+    monkeypatch.setenv("OPENROUTER_API_KEY", "or-test")
+    monkeypatch.setenv("OPENROUTER_MODEL", "anthropic/claude-3.5-haiku")
+    monkeypatch.setenv("OPENROUTER_BASE_URL", "https://proxy.example/v1")
+
+    cfg = load_config()
+
+    assert cfg.provider == OPENROUTER_PROVIDER
+    assert cfg.openrouter_api_key == "or-test"
+    assert cfg.openrouter_model == "anthropic/claude-3.5-haiku"
+    assert cfg.openrouter_base_url == "https://proxy.example/v1"
+
+
+def test_load_config_openrouter_defaults(monkeypatch) -> None:
+    monkeypatch.setenv("GENERATION_PROVIDER", "openrouter")
+    monkeypatch.setenv("OPENROUTER_API_KEY", "or-test")
+
+    cfg = load_config()
+
+    assert cfg.openrouter_model == DEFAULT_OPENROUTER_MODEL
+    assert cfg.openrouter_base_url == "https://openrouter.ai/api/v1"
+
+
+def test_load_config_case_insensitive_provider(monkeypatch) -> None:
+    monkeypatch.setenv("GENERATION_PROVIDER", "OpenRouter")
+
+    assert load_config().provider == OPENROUTER_PROVIDER
+
+
+def test_load_config_rejects_unknown_provider(monkeypatch) -> None:
+    monkeypatch.setenv("GENERATION_PROVIDER", "watson")
+
+    assert load_config().provider == GEMINI_PROVIDER

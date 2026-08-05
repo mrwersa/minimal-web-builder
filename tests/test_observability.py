@@ -47,10 +47,12 @@ def test_generation_event_to_dict_includes_all_fields() -> None:
         tone_key="landing",
         complexity_key="detailed",
         strict_minimal=True,
+        provider="openrouter",
     ).to_dict()
 
     assert payload["event"] == "x"
     assert payload["tone_key"] == "landing"
     assert payload["complexity_key"] == "detailed"
     assert payload["strict_minimal"] is True
+    assert payload["provider"] == "openrouter"
     assert "timestamp" in payload

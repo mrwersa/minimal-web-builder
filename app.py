@@ -4,7 +4,7 @@ import streamlit as st
 import streamlit.components.v1 as components
 
 from src.a11y import audit_generated_html
-from src.config import load_config
+from src.config import OPENROUTER_PROVIDER, load_config
 from src.constraints import (
     COLOR_LIMITS,
     COLOR_LIMITS_BY_KEY,
@@ -75,14 +75,6 @@ from src.theme import (
 )
 from src.validation import validate_user_prompt
 
-try:
-    import google.generativeai as genai
-except ModuleNotFoundError:
-    st.error(
-        "Module 'google.generativeai' not installed. Run `pip install google-generativeai`."
-    )
-    st.stop()
-
 # --- PAGE CONFIG ---
 st.set_page_config(
     page_title="Minimal Web Builder",
@@ -97,19 +89,31 @@ init_session_state(st.session_state)
 
 # --- API CONFIGURATION ---
 config = load_config()
-api_key = config.api_key
-model = config.model
 temperature = config.temperature
 max_output_tokens = config.max_output_tokens
 max_prompt_chars = config.max_prompt_chars
 
-if not api_key:
-    st.warning("Please provide your Gemini API key in the .env file to start.")
-    st.stop()
+if config.provider == OPENROUTER_PROVIDER:
+    if not config.openrouter_api_key:
+        st.warning("Please provide your OpenRouter API key in the .env file to start.")
+        st.stop()
+    genai = None
+    gemini_model = config.openrouter_model
+else:
+    try:
+        import google.generativeai as genai
+    except ModuleNotFoundError:
+        st.error(
+            "Module 'google.generativeai' not installed. Run `pip install google-generativeai`."
+        )
+        st.stop()
+    if not config.api_key:
+        st.warning("Please provide your Gemini API key in the .env file to start.")
+        st.stop()
 
-# Configure Gemini
-genai.configure(api_key=api_key)
-gemini_model = genai.GenerativeModel(model)
+    # Configure Gemini
+    genai.configure(api_key=config.api_key)
+    gemini_model = genai.GenerativeModel(config.model)
 
 # --- GENERATION PROFILES ---
 PROFILES_DIR = Path(__file__).resolve().parent / "profiles"
@@ -476,6 +480,9 @@ if st.session_state.is_regenerating_section:
         ),
         analytics_file=config.analytics_file,
         refine_aspect_key=st.session_state.get("refine_aspect"),
+        provider=config.provider,
+        api_key=config.openrouter_api_key or "",
+        base_url=config.openrouter_base_url,
     )
 
     if output.startswith("API error:"):
@@ -522,6 +529,9 @@ if st.session_state.is_generating:
             st.session_state.get("layout_dna_guidance"),
         ),
         analytics_file=config.analytics_file,
+        provider=config.provider,
+        api_key=config.openrouter_api_key or "",
+        base_url=config.openrouter_base_url,
     )
 
     if output.startswith("API error:"):

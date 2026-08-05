@@ -45,10 +45,17 @@ A sleek, minimalist web application builder powered by Google Gemini AI. Create 
    pip install -r requirements.txt
    ```
 
-3. Create a `.env` file in the project root with your API key:
+3. Create a `.env` file in the project root with an API key. The default provider is **Gemini**:
    ```
    GEMINI_API_KEY=your_gemini_api_key_here
    ```
+   To use **OpenRouter** instead, set `GENERATION_PROVIDER=openrouter` and provide your OpenRouter key (optionally choose a model):
+   ```
+   GENERATION_PROVIDER=openrouter
+   OPENROUTER_API_KEY=your_openrouter_api_key_here
+   OPENROUTER_MODEL=google/gemini-2.0-flash
+   ```
+   See `.env.example` for the full list of supported variables.
    Optional: set `ANALYTICS_FILE=data/events.jsonl` to append structured generation events (latency, output size, failures) as JSON lines to a local file.
 
 4. Run the application:

@@ -13,6 +13,20 @@ from src.sections import PageSection
 from src.theme import DEFAULT_TONE_KEY, STRICT_MINIMAL_GUIDANCE
 
 
+class _FakeResponse:
+    def __init__(self, body: bytes) -> None:
+        self._body = body
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc) -> bool:
+        return False
+
+    def read(self) -> bytes:
+        return self._body
+
+
 class _FakeGenaiTypes:
     class GenerationConfig:
         def __init__(self, **kwargs) -> None:
@@ -294,6 +308,102 @@ def test_call_gemini_for_section_records_error_event(tmp_path) -> None:
     payload = json.loads(analytics.read_text(encoding="utf-8").splitlines()[0])
     assert payload["event"] == "generation.error"
     assert "boom" in payload["error"]
+
+
+def test_call_gemini_openrouter_posts_chat_completion(monkeypatch) -> None:
+    captured: dict = {}
+
+    def fake_urlopen(request, timeout=None):
+        captured["request"] = request
+        captured["timeout"] = timeout
+        body = json.dumps(
+            {"choices": [{"message": {"content": "<main>hi</main>"}}]}
+        ).encode("utf-8")
+        return _FakeResponse(body)
+
+    monkeypatch.setattr("src.generation.urllib.request.urlopen", fake_urlopen)
+
+    out = call_gemini(
+        model="google/gemini-2.0-flash",
+        genai=None,
+        messages=[{"role": "user", "content": "hi"}],
+        temperature=0.3,
+        max_output_tokens=200,
+        provider="openrouter",
+        api_key="or-key",
+        base_url="https://openrouter.ai/api/v1",
+    )
+
+    assert out == "<main>hi</main>"
+    request = captured["request"]
+    assert request.full_url == "https://openrouter.ai/api/v1/chat/completions"
+    assert request.get_header("Authorization") == "Bearer or-key"
+    assert request.headers["Content-type"] == "application/json"
+    payload = json.loads(request.data)
+    assert payload["model"] == "google/gemini-2.0-flash"
+    assert payload["temperature"] == 0.3
+    assert payload["max_tokens"] == 200
+    assert payload["messages"][0]["role"] == "user"
+    assert payload["messages"][0]["content"].startswith("You are an expert web app")
+    assert captured["timeout"] is not None
+
+
+def test_call_gemini_openrouter_surfaces_http_error(monkeypatch) -> None:
+    def fake_urlopen(request, timeout=None):
+        raise RuntimeError("HTTP 401 Unauthorized")
+
+    monkeypatch.setattr("src.generation.urllib.request.urlopen", fake_urlopen)
+
+    out = call_gemini(
+        model="m",
+        genai=None,
+        messages=[{"role": "user", "content": "hi"}],
+        temperature=0.2,
+        max_output_tokens=100,
+        provider="openrouter",
+        api_key="or-key",
+    )
+
+    assert out.startswith("API error:")
+    assert "401" in out
+
+
+def test_call_gemini_openrouter_records_provider_event(tmp_path, monkeypatch) -> None:
+    analytics = tmp_path / "events.jsonl"
+
+    def fake_urlopen(request, timeout=None):
+        body = json.dumps({"choices": [{"message": {"content": "ok"}}]}).encode("utf-8")
+        return _FakeResponse(body)
+
+    monkeypatch.setattr("src.generation.urllib.request.urlopen", fake_urlopen)
+
+    call_gemini(
+        model="m",
+        genai=None,
+        messages=[{"role": "user", "content": "hi"}],
+        temperature=0.2,
+        max_output_tokens=100,
+        provider="openrouter",
+        api_key="or-key",
+        analytics_file=str(analytics),
+    )
+
+    payload = json.loads(analytics.read_text(encoding="utf-8").splitlines()[0])
+    assert payload["event"] == "generation.success"
+    assert payload["provider"] == "openrouter"
+
+
+def test_call_gemini_default_provider_is_gemini(tmp_path) -> None:
+    model = _FakeModel(text="<div>ok</div>")
+    call_gemini(
+        model,
+        _FakeGenai(),
+        [{"role": "user", "content": "hi"}],
+        temperature=0.2,
+        max_output_tokens=100,
+    )
+
+    assert "Conversation:" in model.last_prompt
 
 
 def _section() -> PageSection:
