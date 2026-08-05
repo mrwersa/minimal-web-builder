@@ -16,6 +16,7 @@ from src.state import (
     build_generation_messages,
     init_session_state,
 )
+from src.safety import apply_output_safety_policy
 from src.validation import validate_user_prompt
 
 try:
@@ -313,8 +314,12 @@ if st.session_state.is_generating:
         apply_generation_error(st.session_state, output)
         st.rerun()
 
+    sanitized_output, safety_alerts = apply_output_safety_policy(output)
+    if safety_alerts:
+        st.warning("Safety policy applied: " + " ".join(safety_alerts))
+
     # Update session state with results
-    apply_generation_result(st.session_state, output)
+    apply_generation_result(st.session_state, sanitized_output)
 
     # Refresh UI to show new content
     st.rerun()
