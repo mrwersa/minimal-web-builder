@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Download, FileCode2, FileText, FileType2 } from "lucide-react";
 import { exportPage } from "../api";
 import { useStore } from "../store";
-import { cn } from "../lib/utils";
+import { Button } from "./ui/Button";
 
 export default function CodePanel() {
   const code = useStore((s) => s.code);
@@ -48,22 +48,20 @@ export default function CodePanel() {
             <button
               key={m}
               onClick={() => setMode(m)}
-              className={cn(
-                "rounded-md px-3 py-1.5 text-sm transition-colors",
-                mode === m ? "bg-accent text-white" : "text-muted hover:text-text2"
-              )}
+              className={
+                mode === m
+                  ? "rounded-md bg-accent px-3 py-1.5 text-sm font-medium text-white"
+                  : "rounded-md px-3 py-1.5 text-sm text-muted transition-colors hover:text-text2"
+              }
             >
               {m === "single" ? "Single HTML" : "Split"}
             </button>
           ))}
         </div>
-        <button
-          onClick={runExport}
-          className="flex items-center gap-1.5 rounded-lg border border-border2 px-3 py-1.5 text-sm font-medium text-text2 transition-colors hover:bg-bg"
-        >
+        <Button variant="outline" onClick={runExport} className="gap-1.5">
           <Download className="h-3.5 w-3.5" />
           Prepare export
-        </button>
+        </Button>
       </div>
 
       {files && (

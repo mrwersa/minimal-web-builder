@@ -59,7 +59,10 @@ def test_options_shape(client: TestClient) -> None:
 
 
 def test_sections_listing(client: TestClient) -> None:
-    r = client.get("/api/sections?code=<body><header>h</header><main>m</main></body>")
+    r = client.post(
+        "/api/sections",
+        json={"code": "<body><header>h</header><main>m</main></body>"},
+    )
     assert r.status_code == 200
     tags = [s["tag"] for s in r.json()["sections"]]
     assert tags == ["header", "main"]

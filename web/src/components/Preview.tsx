@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef } from "react";
-import { Loader2, MousePointerClick } from "lucide-react";
+import { MousePointerClick } from "lucide-react";
 import { useStore } from "../store";
+import { Spinner } from "./ui/Spinner";
 
 const CSP = (
   "default-src 'none'; img-src data: blob:; style-src 'unsafe-inline'; " +
@@ -127,7 +128,7 @@ export default function Preview() {
       {busy && (
         <div className="absolute inset-0 flex items-center justify-center bg-white/75 backdrop-blur-sm animate-fade-in">
           <div className="flex flex-col items-center gap-3">
-            <Loader2 className="h-10 w-10 animate-spin text-accent" />
+            <Spinner size="lg" className="border-accentSoft border-t-accent" />
             <p className="text-sm font-medium text-accent">Generating your minimalist website…</p>
             <p className="text-xs text-muted2">This usually takes 5–15 seconds</p>
           </div>
