@@ -1,6 +1,8 @@
 import { useState } from "react";
+import { Download, FileCode2, FileText, FileType2 } from "lucide-react";
 import { exportPage } from "../api";
 import { useStore } from "../store";
+import { cn } from "../lib/utils";
 
 export default function CodePanel() {
   const code = useStore((s) => s.code);
@@ -8,7 +10,12 @@ export default function CodePanel() {
   const [files, setFiles] = useState<Record<string, string> | null>(null);
 
   if (!code) {
-    return <div className="p-6 text-sm text-muted">No code generated yet.</div>;
+    return (
+      <div className="flex h-full flex-col items-center justify-center gap-2 text-center">
+        <FileCode2 className="h-10 w-10 text-muted2" />
+        <p className="text-sm text-muted">No code generated yet.</p>
+      </div>
+    );
   }
 
   async function runExport() {
@@ -27,18 +34,24 @@ export default function CodePanel() {
     URL.revokeObjectURL(url);
   }
 
+  const fileIcons: Record<string, React.ReactNode> = {
+    "index.html": <FileText className="h-3.5 w-3.5" />,
+    "styles.css": <FileCode2 className="h-3.5 w-3.5" />,
+    "app.js": <FileType2 className="h-3.5 w-3.5" />,
+  };
+
   return (
-    <div className="flex h-full flex-col overflow-y-auto p-4">
-      <div className="mb-4 flex items-center gap-3">
+    <div className="flex h-full flex-col overflow-hidden p-4">
+      <div className="mb-3 flex items-center gap-3">
         <div className="flex rounded-lg border border-border2 p-0.5">
           {(["single", "split"] as const).map((m) => (
             <button
               key={m}
               onClick={() => setMode(m)}
-              className={
-                "rounded-md px-3 py-1.5 text-sm " +
-                (mode === m ? "bg-accent text-white" : "text-muted hover:text-text2")
-              }
+              className={cn(
+                "rounded-md px-3 py-1.5 text-sm transition-colors",
+                mode === m ? "bg-accent text-white" : "text-muted hover:text-text2"
+              )}
             >
               {m === "single" ? "Single HTML" : "Split"}
             </button>
@@ -46,27 +59,29 @@ export default function CodePanel() {
         </div>
         <button
           onClick={runExport}
-          className="rounded-lg bg-accentSoft px-3 py-1.5 text-sm font-medium text-accent hover:bg-accent hover:text-white"
+          className="flex items-center gap-1.5 rounded-lg border border-border2 px-3 py-1.5 text-sm font-medium text-text2 transition-colors hover:bg-bg"
         >
+          <Download className="h-3.5 w-3.5" />
           Prepare export
         </button>
       </div>
 
       {files && (
-        <div className="mb-4 flex flex-wrap gap-2">
+        <div className="mb-3 flex flex-wrap gap-2">
           {Object.keys(files).map((name) => (
             <button
               key={name}
               onClick={() => download(name, files[name])}
-              className="rounded-lg border border-border2 px-3 py-1.5 text-xs hover:bg-bg"
+              className="flex items-center gap-1.5 rounded-lg border border-border2 px-3 py-2 text-xs text-text2 transition-colors hover:border-accent hover:text-accent"
             >
-              ⬇ {name}
+              {fileIcons[name] ?? <Download className="h-3.5 w-3.5" />}
+              {name}
             </button>
           ))}
         </div>
       )}
 
-      <pre className="code rounded-lg border border-border2 bg-surface p-4 text-text2">
+      <pre className="code flex-1 overflow-auto rounded-xl border border-border2 bg-surface p-4 text-text2">
         {code}
       </pre>
     </div>
