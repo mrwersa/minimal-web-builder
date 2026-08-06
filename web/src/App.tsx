@@ -1,9 +1,10 @@
 import { useEffect, useState } from "react";
 import { Toaster, toast } from "sonner";
-import { Eye, Code2, AlertCircle, Info, Sparkles, ArrowRight } from "lucide-react";
+import { Eye, Code2, AlertCircle, Info, Sparkles, ArrowRight, Undo2, Redo2 } from "lucide-react";
 import Preview from "./components/Preview";
 import CodePanel from "./components/CodePanel";
 import Sidebar from "./components/Sidebar";
+import ChatPanel from "./components/ChatPanel";
 import { useStore } from "./store";
 import { cn } from "./lib/utils";
 import { Button } from "./components/ui/Button";
@@ -23,13 +24,33 @@ export default function App() {
   const runGenerate = useStore((s) => s.runGenerate);
   const constraintMode = useStore((s) => s.constraintMode);
   const runConstraints = useStore((s) => s.runConstraints);
+  const undoStack = useStore((s) => s.undoStack);
+  const redoStack = useStore((s) => s.redoStack);
+  const undo = useStore((s) => s.undo);
+  const redo = useStore((s) => s.redo);
   const [tab, setTab] = useState<Tab>("preview");
   const [prompt, setPrompt] = useState("");
+  const [showChat, setShowChat] = useState(true);
 
   useEffect(() => { loadOptions(); }, [loadOptions]);
   useEffect(() => { if (safetyAlerts.length) toast.warning("Safety: " + safetyAlerts.join(", ")); }, [safetyAlerts]); // eslint-disable-line
   useEffect(() => { if (error) toast.error(error); }, [error]); // eslint-disable-line
   useEffect(() => { if (code && !busy) { toast.success("Page generated"); setTab("preview"); } }, [code, busy]); // eslint-disable-line
+
+  useEffect(() => {
+    function handleKeyDown(e: KeyboardEvent) {
+      if ((e.metaKey || e.ctrlKey) && e.key === "z") {
+        e.preventDefault();
+        if (e.shiftKey) {
+          redo();
+        } else {
+          undo();
+        }
+      }
+    }
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [undo, redo]);
 
   function submit() {
     const p = prompt.trim();
@@ -51,7 +72,40 @@ export default function App() {
             <ToolbarTab icon={<Eye className="h-4 w-4" />} label="Preview" active={tab === "preview"} onClick={() => setTab("preview")} />
             <ToolbarTab icon={<Code2 className="h-4 w-4" />} label="Code" active={tab === "code"} onClick={() => setTab("code")} />
           </div>
-          <StatusIndicator status={status} />
+          <div className="flex items-center gap-2">
+            <button
+              onClick={undo}
+              disabled={undoStack.length === 0}
+              className={cn(
+                "rounded-lg p-1.5 transition-colors",
+                undoStack.length === 0 ? "text-muted2/40" : "text-muted2 hover:bg-bg hover:text-text2"
+              )}
+              title="Undo (Ctrl+Z)"
+            >
+              <Undo2 className="h-4 w-4" />
+            </button>
+            <button
+              onClick={redo}
+              disabled={redoStack.length === 0}
+              className={cn(
+                "rounded-lg p-1.5 transition-colors",
+                redoStack.length === 0 ? "text-muted2/40" : "text-muted2 hover:bg-bg hover:text-text2"
+              )}
+              title="Redo (Ctrl+Shift+Z)"
+            >
+              <Redo2 className="h-4 w-4" />
+            </button>
+            <StatusIndicator status={status} />
+            <button
+              onClick={() => setShowChat(!showChat)}
+              className={cn(
+                "rounded-lg px-2.5 py-1.5 text-xs font-medium transition-colors",
+                showChat ? "bg-accentSoft text-accent" : "text-muted2 hover:bg-bg"
+              )}
+            >
+              Chat
+            </button>
+          </div>
         </header>
 
         {/* Inline alerts */}
@@ -79,10 +133,12 @@ export default function App() {
           )}
         </div>
 
-        {/* Chat input */}
-        {code || tab === "preview" ? (
-          <ChatInput value={prompt} onChange={setPrompt} onSubmit={submit} disabled={busy} />
-        ) : null}
+        {/* Chat panel */}
+        {showChat && (
+          <div className="h-72 shrink-0 border-t border-border2">
+            <ChatPanel />
+          </div>
+        )}
 
         <Toaster position="bottom-right" richColors closeButton />
       </main>
@@ -119,28 +175,6 @@ function StatusIndicator({ status }: { status: string }) {
         <span className={cn("h-1.5 w-1.5 rounded-full", c.dot)} />
         {c.label}
       </Badge>
-    </div>
-  );
-}
-
-function ChatInput({ value, onChange, onSubmit, disabled }: { value: string; onChange: (v: string) => void; onSubmit: () => void; disabled?: boolean }) {
-  return (
-    <div className="shrink-0 border-t border-border2 bg-surface px-4 py-3">
-      <div className="flex items-end gap-2">
-        <Textarea
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-          onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); onSubmit(); } }}
-          placeholder={disabled ? "Generating… please wait" : "Describe a website or refinement…"}
-          disabled={disabled}
-          rows={1}
-          className="max-h-40 min-h-[44px] flex-1"
-        />
-        <Button onClick={onSubmit} disabled={disabled || !value.trim()} className="h-[44px]">
-          {disabled ? <Spinner size="sm" className="border-white/30 border-t-white" /> : null}
-          {disabled ? "…" : "Generate"}
-        </Button>
-      </div>
     </div>
   );
 }

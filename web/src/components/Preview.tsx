@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef } from "react";
 import { MousePointerClick } from "lucide-react";
 import { useStore } from "../store";
 import { Spinner } from "./ui/Spinner";
+import GrapeJSEditor from "./GrapeJSEditor";
 
 const CSP = (
   "default-src 'none'; img-src data: blob:; style-src 'unsafe-inline'; " +
@@ -91,7 +92,7 @@ export default function Preview() {
   const code = useStore((s) => s.code);
   const editing = useStore((s) => s.editing);
   const busy = useStore((s) => s.busy);
-  const set = useStore((s) => s.set);
+  const setCodeWithHistory = useStore((s) => s.setCodeWithHistory);
 
   const doc = useMemo(() => {
     if (!code) return "";
@@ -108,11 +109,25 @@ export default function Preview() {
     function onMessage(e: MessageEvent) {
       const data = e.data;
       if (!data || typeof data.type !== "string" || data.type !== "mwb:edits") return;
-      set("code", data.html as string);
+      setCodeWithHistory(data.html as string);
     }
     window.addEventListener("message", onMessage);
     return () => window.removeEventListener("message", onMessage);
-  }, [set]);
+  }, [setCodeWithHistory]);
+
+  if (editing && code) {
+    return (
+      <div className="relative h-full w-full overflow-hidden bg-surface">
+        <GrapeJSEditor html={code} onUpdate={(newHtml) => setCodeWithHistory(newHtml)} />
+
+        {/* WYSIWYG editing indicator */}
+        <div className="pointer-events-none absolute bottom-4 left-1/2 flex -translate-x-1/2 items-center gap-1.5 rounded-full bg-accent px-4 py-1.5 text-xs font-medium text-white shadow-lg animate-slide-up">
+          <MousePointerClick className="h-3.5 w-3.5" />
+          GrapeJS Editor — drag components, edit text, style with the right panel
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="relative h-full w-full overflow-hidden bg-surface">
@@ -132,14 +147,6 @@ export default function Preview() {
             <p className="text-sm font-medium text-accent">Generating your minimalist website…</p>
             <p className="text-xs text-muted2">This usually takes 5–15 seconds</p>
           </div>
-        </div>
-      )}
-
-      {/* WYSIWYG editing indicator */}
-      {editing && !busy && code && (
-        <div className="pointer-events-none absolute bottom-4 left-1/2 flex -translate-x-1/2 items-center gap-1.5 rounded-full bg-accent px-4 py-1.5 text-xs font-medium text-white shadow-lg animate-slide-up">
-          <MousePointerClick className="h-3.5 w-3.5" />
-          Editing mode — click an element, edit it, then press Apply
         </div>
       )}
     </div>
