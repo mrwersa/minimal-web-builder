@@ -1,4 +1,4 @@
-"""Build a generation client once at backend startup, mirroring app.py.
+"""Build a generation client once at backend startup.
 
 The existing ``src.generation`` module does the real work; here we only assemble
 the provider-specific ``model`` / ``genai`` handles and config so the API layer

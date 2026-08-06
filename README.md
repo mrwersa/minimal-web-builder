@@ -5,7 +5,7 @@ A sleek, minimalist web application builder powered by AI (Gemini / OpenRouter).
 ![Minimal Web Builder](https://img.shields.io/badge/Minimal%20Web%20Builder-v2.0-blue)
 ![React](https://img.shields.io/badge/React-18-61DAFB)
 ![FastAPI](https://img.shields.io/badge/FastAPI-0.41-009688)
-![Streamlit](https://img.shields.io/badge/also%20on-Streamlit-FF4B4B)
+![LangGraph](https://img.shields.io/badge/LangGraph-1.2-1C3C3C)
 
 ## Features
 
@@ -36,12 +36,6 @@ A sleek, minimalist web application builder powered by AI (Gemini / OpenRouter).
 
 ## Setup
 
-There are two UIs: the new **React + FastAPI** app (v2, recommended) and the
-original **Streamlit** app (v1, kept as a fallback). Both share the same `src/`
-generation, safety, export, and template logic.
-
-### v2 — React + FastAPI (recommended)
-
 1. Install Python deps and the frontend:
    ```bash
    pip install -r requirements.txt
@@ -59,42 +53,6 @@ generation, safety, export, and template logic.
 
 For a single-process production build, run `cd web && npm run build` then
 `uvicorn server.main:app --port 8000` and open http://localhost:8000/.
-
-### v1 — Streamlit (fallback)
-
-1. Clone this repository:
-   ```bash
-   git clone https://github.com/mrwersa/minimal-web-builder.git
-   cd minimal-web-builder
-   ```
-
-2. Install required packages:
-   ```bash
-   pip install -r requirements.txt
-   ```
-
-3. Create a `.env` file in the project root with an API key. The default provider is **Gemini**:
-   ```
-   GEMINI_API_KEY=your_gemini_api_key_here
-   ```
-   To use **OpenRouter** instead, set `GENERATION_PROVIDER=openrouter` and provide your OpenRouter key (optionally choose a model):
-   ```
-   GENERATION_PROVIDER=openrouter
-   OPENROUTER_API_KEY=your_openrouter_api_key_here
-   OPENROUTER_MODEL=google/gemini-2.5-flash
-   ```
-   See `.env.example` for the full list of supported variables.
-   Optional: set `ANALYTICS_FILE=data/events.jsonl` to append structured generation events (latency, output size, failures) as JSON lines to a local file.
-
-4. Run the application:
-   ```bash
-   streamlit run app.py
-   ```
-
-5. Open your browser and navigate to:
-   ```
-   http://localhost:8501
-   ```
 
 ## Usage
 
@@ -116,37 +74,30 @@ To edit the generated page directly, turn on **WYSIWYG editing** in the sidebar 
 
 ## How It Works
 
-1. The application uses the Streamlit framework for the user interface
-2. When you enter a prompt, it's sent to Google's Gemini AI
-3. Gemini generates complete HTML, CSS, and JavaScript code
-4. Use the sidebar to pick a tone preset (editorial, product, portfolio, landing) or enable strict minimal mode before generating
-5. While generating, the preview area is blurred and a loader overlay is shown
-6. The code is rendered directly in the browser for immediate preview (full height)
-7. You can view and download the source code
+1. The React frontend sends your prompt to the FastAPI backend.
+2. A LangGraph conversational agent classifies your intent (generate / refine / answer), calls the AI model, and validates the output through safety + accessibility guardrails.
+3. The generated HTML is rendered in a sandboxed preview iframe.
+4. Turn on WYSIWYG editing to click and edit elements directly.
+5. Describe refinements in the chat bar — the agent applies them to the current page.
+6. Export your page as a single HTML file or split into HTML/CSS/JS.
 
 ## Technologies
 
-### v2 (React + FastAPI)
 - **React 18 + Vite + TypeScript** — single-page frontend
 - **Tailwind CSS** — styling, themed from the shared design tokens
 - **Zustand** — lightweight state
 - **FastAPI** — backend serving the existing `src/*` generation, safety, and export logic
+- **LangGraph** — conversational agent with memory, guardrails, and resilience
 - **Python** — backend language
 - **uvicorn** — ASGI server
-
-### v1 (Streamlit, fallback)
-- **Streamlit** — Python web app framework
-
-### Shared (both UIs)
 - **Google Generative AI / OpenRouter** — Gemini model for code generation
 - **HTML/CSS/JS** — output languages
 
 ## Requirements
 
-- Python 3.7+
-- streamlit>=1.30.0
-- google-generativeai>=0.3.2
-- python-dotenv
+- Python 3.12+
+- Node.js 18+
+- See `requirements.txt` and `web/package.json`
 
 ## Repository Protection
 

@@ -10,7 +10,7 @@ Build the most reliable minimal web builder for self-contained, beautiful, respo
 
 ## Current State (v1)
 
-- Modular architecture: `app.py` orchestrates UI; `src/` holds config, generation, rendering, state, validation, safety, theme, and a11y.
+- Modular architecture: `server/` holds the FastAPI API + LangGraph agent; `src/` holds config, generation, validation, safety, theme, and a11y.
 - Gemini prompt-to-HTML generation with sandboxed in-app preview.
 - Session state lifecycle, input validation, output safety policy, and deterministic tests.
 - Generation controls (tone presets, strict minimal mode, complexity slider) shipped as Phase 2 groundwork.
@@ -33,7 +33,7 @@ Goals:
 - Establish baseline testing and CI confidence.
 
 Work items (all complete):
-- ✅ Split app.py into modules:
+- ✅ Split monolith into modules (src/config.py, src/generation.py, src/rendering.py [removed], src/state.py [removed]).
   - ✅ src/config.py for env and model settings.
   - ✅ src/generation.py for Gemini adapter and prompt policies.
   - ✅ src/rendering.py for preview/code rendering helpers.
@@ -66,8 +66,8 @@ Goals:
 Work items:
 - ✅ Introduce a small design token layer:
   - ✅ Typography scale, spacing scale, neutral + accent palette.
-  - ✅ Shared UI constants for Streamlit theme consistency.
-  - ✅ App CSS/Streamlit theme consumes the tokens via a single `build_app_styles()` entry point.
+  - ✅ Shared UI constants for theme consistency.
+  - ✅ App CSS consumes the tokens (now via Tailwind in web/).
 - ✅ Better generation controls:
   - ✅ Tone presets (minimal, editorial, product, portfolio, landing).
   - ✅ Optional strict minimal mode (fewer decorations).
@@ -154,9 +154,8 @@ Exit criteria (so far):
 
 ## Phase 6: Re-platform to React + FastAPI 🔄 (in progress)
 
-Goal: move the UI off Streamlit onto a React + FastAPI stack, reusing the
-existing `src/*` module layer unchanged. Streamlit (`app.py`) is kept as a
-fallback during the migration.
+Goal: move the UI onto a React + FastAPI stack, reusing the existing `src/*`
+module layer unchanged. The legacy Streamlit app has been removed.
 
 Inspiration: the NaturalMash mixed-initiative model (NL programming + WYSIWYG +
 live programming) needs a rich interactive canvas, which Streamlit's rerun model
@@ -177,12 +176,12 @@ Work items:
 - ⬜ Live programming (debounced auto-apply + undo/redo) in the React canvas.
 - ⬜ Element-scoped AI refinement select → describe → regenerate just that element.
 - ⬜ Frontend component tests (Vitest + Testing Library).
-- ⬜ Retire the Streamlit shell once parity is reached.
+- ⬜ GrapeJS WYSIWYG integration (production-grade visual editor).
 
 Exit criteria (so far):
 - ✅ The React app can generate, preview, edit (WYSIWYG) and export end-to-end
   against the real provider.
-- ⬜ Parity coverage and live-programming UX before deprecating `app.py`.
+- ⬜ Parity coverage and live-programming UX before full production readiness.
 
 ## Engineering Principles
 

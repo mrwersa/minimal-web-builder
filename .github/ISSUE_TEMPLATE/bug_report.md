@@ -22,7 +22,7 @@ What should have happened?
 
 - OS:
 - Python version:
-- Streamlit version:
+- Node version:
 
 ## Additional context
 
