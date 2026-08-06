@@ -1,9 +1,12 @@
-streamlit>=1.30.0
-google-generativeai>=0.3.2
-python-dotenv
-# v2 React/FastAPI platform
+# Minimal Web Builder — Python backend dependencies
+# The backend is FastAPI + LangGraph; the frontend is React+Vite (see web/).
+
 fastapi>=0.110.0
 uvicorn[standard]>=0.27.0
 httpx>=0.27.0
-# Streamlit 1.61 pulls starlette 1.4 which crashes the GZipResponder at startup.
-starlette<1.0
+# LangGraph agent: stateful, conversational, guardrails, memory, resilience
+langgraph>=1.0.0
+langchain-core>=1.0.0
+# Gemini provider (optional — OpenRouter is configured by default)
+google-generativeai>=0.3.2
+python-dotenv

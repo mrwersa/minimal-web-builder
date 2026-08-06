@@ -2,7 +2,7 @@
 
 Reuses the existing ``src/*`` modules (generation, safety, a11y, sections,
 export, templates, layout_dna, profiles, theme, constraints) as a service
-layer. The Streamlit ``app.py`` is unaffected and still works.
+layer, plus a LangGraph conversational agent (/api/chat).
 """
 
 from __future__ import annotations
@@ -18,6 +18,8 @@ from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
+from server.agent import run_agent
+from server.agent import set_client as set_agent_client
 from server.runtime import GenerationClient, build_client, generate, regenerate_section
 from src.a11y import audit_generated_html
 from src.constraints import (
@@ -56,7 +58,6 @@ from src.theme import (
     tone_options,
 )
 from src.validation import validate_user_prompt
-from src.wysiwyg import build_editable_preview_document
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 PROFILES_DIR = REPO_ROOT / "profiles"
@@ -258,6 +259,91 @@ def generate_page(req: GenerateRequest) -> JSONResponse:
     )
 
 
+class ChatRequest(BaseModel):
+    message: str
+    thread_id: str = "default"
+    current_code: str | None = None
+    tone: str = "minimal"
+    complexity: str = "balanced"
+    strict_minimal: bool = False
+    profile: str | None = None
+    layout_dna_guidance: str = ""
+
+
+@app.post("/api/chat")
+def chat(req: ChatRequest) -> JSONResponse:
+    """Conversational agent endpoint powered by LangGraph.
+
+    Maintains conversation memory per ``thread_id`` across turns. The agent
+    classifies intent (generate / refine / answer), calls the LLM, validates
+    output through safety + a11y guardrails, and returns the updated page.
+    """
+    cfg = _client().config
+    validated, err = validate_user_prompt(
+        req.message, max_prompt_chars=cfg.max_prompt_chars
+    )
+    if err:
+        raise HTTPException(status_code=400, detail=err)
+
+    # Wire the agent's LLM client to the app's configured client
+    set_agent_client(_client())
+
+    # Resolve effective settings (profile overrides)
+    profile = get_profile(_profiles(), req.profile) if req.profile else None
+    if profile:
+        settings = {
+            "tone": profile.tone_key,
+            "complexity": profile.complexity_key,
+            "strict_minimal": profile.strict_minimal,
+            "extra_guidance": profile.extra_guidance,
+        }
+    else:
+        settings = {
+            "tone": req.tone,
+            "complexity": req.complexity,
+            "strict_minimal": req.strict_minimal,
+            "extra_guidance": "",
+        }
+    if req.layout_dna_guidance:
+        settings["extra_guidance"] = (
+            f"{settings.get('extra_guidance', '')}\n{req.layout_dna_guidance}".strip()
+        )
+
+    result = run_agent(
+        validated,
+        thread_id=req.thread_id,
+        current_code=req.current_code,
+        settings=settings,
+    )
+
+    # Extract the assistant's response message (handle both dicts and langchain msgs)
+    messages = result.get("messages", [])
+    assistant_msg = {"role": "assistant", "content": "Done."}
+    for m in reversed(messages):
+        role = (
+            getattr(m, "type", None) or m.get("role")
+            if isinstance(m, dict)
+            else getattr(m, "type", None)
+        )
+        content = (
+            getattr(m, "content", None) if not isinstance(m, dict) else m.get("content")
+        )
+        if role in ("assistant", "ai"):
+            assistant_msg = {"role": "assistant", "content": content or ""}
+            break
+
+    return JSONResponse(
+        {
+            "html": result.get("current_code"),
+            "message": assistant_msg.get("content", ""),
+            "intent": result.get("intent"),
+            "validation_errors": result.get("validation_errors", []),
+            "validation_notes": result.get("validation_notes", []),
+            "error": result.get("error"),
+        }
+    )
+
+
 @app.get("/api/sections")
 def list_sections(code: str) -> dict[str, Any]:
     sections = extract_sections(code)
@@ -358,16 +444,6 @@ def dnas_save(req: SaveDnaRequest) -> dict[str, Any]:
     dna = extract_layout_dna(req.html)
     saved = save_dna(LAYOUT_DNA_DIR, dna)
     return {"name": saved.stem, "signature": grammar_signature(dna)}
-
-
-@app.get("/api/preview-doc")
-def preview_doc(html: str, editing: bool = False) -> dict[str, str]:
-    """Return a sandboxed preview document string for the frontend to set as srcdoc.
-
-    Keeps the CSP/shim logic server-side so the frontend stays thin and the
-    sandboxing policy is not duplicated.
-    """
-    return {"doc": build_editable_preview_document(html, editing=editing)}
 
 
 # ---- export ----

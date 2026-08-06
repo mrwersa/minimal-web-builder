@@ -130,14 +130,6 @@ def test_export_single_and_split(client: TestClient) -> None:
     assert "color:red" in j["files"]["styles.css"]
 
 
-def test_preview_doc_endpoint(client: TestClient) -> None:
-    r = client.get("/api/preview-doc?html=<h1>Hi</h1>&editing=true")
-    assert r.status_code == 200
-    doc = r.json()["doc"]
-    assert "<!doctype html>" in doc
-    assert "Content-Security-Policy" in doc
-
-
 def test_templates_round_trip(
     client: TestClient, tmp_path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

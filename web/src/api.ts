@@ -80,15 +80,6 @@ export async function regenerateSection(req: {
   return r.json();
 }
 
-export async function fetchPreviewDoc(html: string, editing: boolean): Promise<string> {
-  const r = await fetch(
-    `/api/preview-doc?html=${encodeURIComponent(html)}&editing=${editing ? "true" : "false"}`
-  );
-  if (!r.ok) throw new Error(`preview-doc ${r.status}`);
-  const j = await r.json();
-  return j.doc;
-}
-
 export async function fetchTemplates(): Promise<string[]> {
   const r = await fetch("/api/templates");
   if (!r.ok) throw new Error(`templates ${r.status}`);

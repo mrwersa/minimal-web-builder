@@ -57,7 +57,7 @@ jobs:
 
       - name: Syntax check
         run: |
-          python -m compileall -q app.py src tests server
+          python -m compileall -q src tests server
 
       - name: Run tests with coverage
         run: |
