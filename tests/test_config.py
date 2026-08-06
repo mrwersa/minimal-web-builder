@@ -33,7 +33,7 @@ def test_load_config_falls_back_on_invalid_numeric(monkeypatch) -> None:
     cfg = load_config(dotenv_path=_NO_DOTENV)
 
     assert cfg.temperature == 0.2
-    assert cfg.max_output_tokens == 1500
+    assert cfg.max_output_tokens == 8192
     assert cfg.max_prompt_chars == 1200
 
 
