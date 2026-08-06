@@ -35,6 +35,12 @@ interface State {
 
   dnas: api.DnaItem[];
 
+  chatMessages: api.ChatMessage[];
+  threadId: string;
+
+  undoStack: string[];
+  redoStack: string[];
+
   loadOptions: () => Promise<void>;
   set: <K extends keyof State>(key: K, value: State[K]) => void;
   runGenerate: (prompt: string) => Promise<void>;
@@ -46,6 +52,11 @@ interface State {
   doDeleteTemplate: (name: string) => Promise<void>;
   refreshDnas: () => Promise<void>;
   doSaveDna: () => Promise<void>;
+  runChat: (message: string) => Promise<void>;
+  clearChat: () => void;
+  undo: () => void;
+  redo: () => void;
+  setCodeWithHistory: (code: string) => void;
 }
 
 export const useStore = create<State>((set, get) => ({
@@ -81,6 +92,12 @@ export const useStore = create<State>((set, get) => ({
   templateName: "",
 
   dnas: [],
+
+  chatMessages: [],
+  threadId: crypto.randomUUID(),
+
+  undoStack: [],
+  redoStack: [],
 
   set: (key, value) => set({ [key]: value } as Partial<State>),
 
@@ -217,6 +234,78 @@ export const useStore = create<State>((set, get) => ({
       await get().refreshDnas();
     } catch (e) {
       set({ error: String(e instanceof Error ? e.message : e) });
+    }
+  },
+
+  runChat: async (message) => {
+    const s = get();
+    const userMsg: api.ChatMessage = { role: "user", content: message };
+    set({
+      chatMessages: [...s.chatMessages, userMsg],
+      busy: true,
+      error: null,
+    });
+    try {
+      const res = await api.chat({
+        message,
+        thread_id: s.threadId,
+        current_code: s.code,
+        tone: s.tone,
+        complexity: s.complexity,
+        strict_minimal: s.strictMinimal,
+        profile: s.profile,
+        layout_dna_guidance: s.layoutDnaGuidance,
+      });
+      const assistantMsg: api.ChatMessage = { role: "assistant", content: res.message };
+      set({
+        chatMessages: [...get().chatMessages, assistantMsg],
+        code: res.html ?? get().code,
+        busy: false,
+        notes: res.validation_notes,
+        safetyAlerts: res.validation_errors,
+      });
+      if (res.error) set({ error: res.error });
+    } catch (e) {
+      set({ busy: false, error: String(e instanceof Error ? e.message : e) });
+    }
+  },
+
+  clearChat: () => set({ chatMessages: [], threadId: crypto.randomUUID() }),
+
+  undo: () => {
+    const { undoStack, code } = get();
+    if (undoStack.length === 0) return;
+    const prev = undoStack[undoStack.length - 1];
+    const newUndo = undoStack.slice(0, -1);
+    set({
+      undoStack: newUndo,
+      redoStack: code ? [code, ...get().redoStack] : get().redoStack,
+      code: prev,
+    });
+  },
+
+  redo: () => {
+    const { redoStack, code } = get();
+    if (redoStack.length === 0) return;
+    const next = redoStack[0];
+    const newRedo = redoStack.slice(1);
+    set({
+      redoStack: newRedo,
+      undoStack: code ? [...get().undoStack, code] : get().undoStack,
+      code: next,
+    });
+  },
+
+  setCodeWithHistory: (newCode) => {
+    const { code } = get();
+    if (code && code !== newCode) {
+      set({
+        undoStack: [...get().undoStack.slice(-49), code],
+        redoStack: [],
+        code: newCode,
+      });
+    } else {
+      set({ code: newCode });
     }
   },
 }));

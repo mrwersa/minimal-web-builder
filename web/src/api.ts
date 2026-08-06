@@ -142,3 +142,39 @@ export async function exportPage(
   if (!r.ok) throw new Error(`export ${r.status}`);
   return r.json();
 }
+
+export interface ChatMessage {
+  role: "user" | "assistant";
+  content: string;
+}
+
+export interface ChatResponse {
+  html: string | null;
+  message: string;
+  intent: string | null;
+  validation_errors: string[];
+  validation_notes: string[];
+  error: string | null;
+}
+
+export async function chat(req: {
+  message: string;
+  thread_id: string;
+  current_code: string | null;
+  tone: string;
+  complexity: string;
+  strict_minimal: boolean;
+  profile: string | null;
+  layout_dna_guidance: string;
+}): Promise<ChatResponse> {
+  const r = await fetch("/api/chat", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(req),
+  });
+  if (!r.ok) {
+    const d = await r.json().catch(() => ({}));
+    throw new Error(d.detail ?? `chat ${r.status}`);
+  }
+  return r.json();
+}
