@@ -51,7 +51,11 @@ export async function generate(req: {
 }
 
 export async function fetchSections(code: string): Promise<SectionInfo[]> {
-  const r = await fetch(`/api/sections?code=${encodeURIComponent(code)}`);
+  const r = await fetch("/api/sections", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ code }),
+  });
   if (!r.ok) throw new Error(`sections ${r.status}`);
   const j = await r.json();
   return j.sections;

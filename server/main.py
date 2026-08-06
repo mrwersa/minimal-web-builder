@@ -344,9 +344,13 @@ def chat(req: ChatRequest) -> JSONResponse:
     )
 
 
-@app.get("/api/sections")
-def list_sections(code: str) -> dict[str, Any]:
-    sections = extract_sections(code)
+class SectionsRequest(BaseModel):
+    code: str
+
+
+@app.post("/api/sections")
+def list_sections(req: SectionsRequest) -> dict[str, Any]:
+    sections = extract_sections(req.code)
     return {
         "sections": [
             {"index": s.index, "tag": s.tag, "snippet": s.snippet} for s in sections
