@@ -16,6 +16,7 @@ from sqlalchemy import (
 )
 from sqlalchemy.orm import Session, sessionmaker
 
+from server.content import validate_document
 from server.models import (
     MAX_PROJECT_NAME_CHARS,
     PageRecord,
@@ -26,7 +27,6 @@ from server.models import (
     utcnow,
 )
 
-MAX_DOCUMENT_CHARS = 2_000_000
 _REVISION_SOURCES = {
     "create",
     "duplicate",
@@ -62,14 +62,6 @@ def _project_name(name: str) -> str:
     return cleaned
 
 
-def _document(html: str) -> str:
-    if len(html) > MAX_DOCUMENT_CHARS:
-        raise ProjectValidationError(
-            f"Document must be at most {MAX_DOCUMENT_CHARS} characters"
-        )
-    return html
-
-
 def _copy_name(name: str) -> str:
     suffix = " Copy"
     return f"{name[: MAX_PROJECT_NAME_CHARS - len(suffix)].rstrip()}{suffix}"
@@ -83,7 +75,7 @@ class ProjectService:
         self, owner_id: str, name: str, html: str = ""
     ) -> dict[str, Any]:
         clean_name = _project_name(name)
-        clean_html = _document(html)
+        clean_html = validate_document(html)
         with self._sessions.begin() as session:
             project = ProjectRecord(owner_id=owner_id, name=clean_name)
             session.add(project)
@@ -198,7 +190,7 @@ class ProjectService:
         expected_version: int,
         source: str = "autosave",
     ) -> dict[str, Any]:
-        clean_html = _document(html)
+        clean_html = validate_document(html)
         clean_source = source if source in _REVISION_SOURCES else "manual"
         with self._sessions.begin() as session:
             page = self._owned_page(session, owner_id, page_id)

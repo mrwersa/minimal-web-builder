@@ -1,15 +1,12 @@
 from __future__ import annotations
 
-import json
 import re
 from dataclasses import asdict, dataclass
-from pathlib import Path
 
 from src.js_analysis import inline_script_statement_count
 from src.sections import extract_sections
 
 MAX_DNA_NAME_CHARS = 80
-_DNA_NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]*$")
 
 
 @dataclass(frozen=True)
@@ -68,49 +65,8 @@ def from_dict(data: dict) -> LayoutDNA:
     )
 
 
-def _dna_stem(signature: str) -> str:
+def suggest_dna_name(dna: LayoutDNA) -> str:
+    """Create a stable, storage-neutral name from a layout grammar."""
+    signature = grammar_signature(dna)
     stem = re.sub(r"[^A-Za-z0-9]+", "_", signature).strip("_")
     return (stem[:MAX_DNA_NAME_CHARS].rstrip("_") or "layout").lower()
-
-
-def save_dna(dna_dir: str | Path, dna: LayoutDNA) -> Path:
-    """Persist a layout DNA to a JSON file with a unique name based on its grammar."""
-    dna_dir = Path(dna_dir)
-    dna_dir.mkdir(parents=True, exist_ok=True)
-    stem = _dna_stem(grammar_signature(dna))
-    path = dna_dir / f"{stem}.json"
-    counter = 2
-    while path.exists():
-        path = dna_dir / f"{stem}-{counter}.json"
-        counter += 1
-    path.write_text(
-        json.dumps(to_dict(dna), indent=2, sort_keys=True) + "\n",
-        encoding="utf-8",
-    )
-    return path
-
-
-def list_saved_dnas(dna_dir: str | Path) -> list[tuple[str, LayoutDNA]]:
-    """Return [(stem, LayoutDNA), ...] for valid saved layouts, ordered by name."""
-    dna_dir = Path(dna_dir)
-    if not dna_dir.is_dir():
-        return []
-    saved: list[tuple[str, LayoutDNA]] = []
-    for path in sorted(dna_dir.glob("*.json")):
-        try:
-            dna = from_dict(json.loads(path.read_text(encoding="utf-8")))
-        except (json.JSONDecodeError, TypeError, ValueError):
-            continue
-        saved.append((path.stem, dna))
-    return saved
-
-
-def load_dna(dna_dir: str | Path, name: str) -> LayoutDNA | None:
-    """Load a saved layout by stem, guarding against unsafe names."""
-    if not _DNA_NAME_RE.match(name):
-        return None
-    path = Path(dna_dir) / f"{name}.json"
-    try:
-        return from_dict(json.loads(path.read_text(encoding="utf-8")))
-    except (FileNotFoundError, json.JSONDecodeError, TypeError, ValueError):
-        return None

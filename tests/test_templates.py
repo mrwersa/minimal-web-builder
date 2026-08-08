@@ -1,14 +1,43 @@
-from pathlib import Path
+from __future__ import annotations
 
 import pytest
 
-from src.templates import (
-    delete_template,
-    list_templates,
-    load_template,
+from server.assets import (
+    ReusableAssetNotFoundError,
+    ReusableAssetService,
+    ReusableAssetValidationError,
     sanitize_template_name,
-    save_template,
 )
+from server.database import Database
+from server.models import UserRecord
+from src.layout_dna import LayoutDNA
+
+OWNER_ID = "00000000-0000-0000-0000-000000000020"
+OTHER_ID = "00000000-0000-0000-0000-000000000021"
+
+
+@pytest.fixture()
+def assets(tmp_path):
+    database = Database.from_url(f"sqlite:///{tmp_path / 'assets.db'}")
+    with database.sessions.begin() as session:
+        session.add_all(
+            [
+                UserRecord(
+                    id=OWNER_ID,
+                    email="owner@example.test",
+                    password_hash="!test-account",
+                ),
+                UserRecord(
+                    id=OTHER_ID,
+                    email="other@example.test",
+                    password_hash="!test-account",
+                ),
+            ]
+        )
+    try:
+        yield ReusableAssetService(database.sessions)
+    finally:
+        database.close()
 
 
 def test_sanitize_accepts_valid_names() -> None:
@@ -17,61 +46,57 @@ def test_sanitize_accepts_valid_names() -> None:
     assert sanitize_template_name("my_page.html") == "my_page"
 
 
-def test_sanitize_rejects_empty() -> None:
-    with pytest.raises(ValueError, match="empty"):
-        sanitize_template_name("   ")
-
-
-def test_sanitize_rejects_path_separators_and_spaces() -> None:
-    for bad in ("../evil", "a/b", "a\\b", "..", ".", "a b"):
-        with pytest.raises(ValueError, match="may only contain"):
+def test_sanitize_rejects_invalid_names() -> None:
+    for bad in ("", "../evil", "a/b", "a\\b", "..", ".", "a b", "x" * 65):
+        with pytest.raises(ReusableAssetValidationError):
             sanitize_template_name(bad)
 
 
-def test_sanitize_rejects_too_long() -> None:
-    with pytest.raises(ValueError, match="at most"):
-        sanitize_template_name("x" * 65)
+def test_template_round_trip_update_and_delete(assets: ReusableAssetService) -> None:
+    assert assets.save_template(OWNER_ID, "hero", "<section>one</section>") == "hero"
+    assets.save_template(OWNER_ID, "hero.html", "<section>two</section>")
+
+    assert assets.list_templates(OWNER_ID) == ["hero"]
+    assert assets.load_template(OWNER_ID, "hero") == "<section>two</section>"
+    assets.delete_template(OWNER_ID, "hero")
+    assets.delete_template(OWNER_ID, "hero")
+    assert assets.list_templates(OWNER_ID) == []
 
 
-def test_save_and_load_round_trip(tmp_path: Path) -> None:
-    path = save_template(tmp_path, "hero", "<section>hi</section>")
+def test_templates_are_owner_scoped(assets: ReusableAssetService) -> None:
+    assets.save_template(OWNER_ID, "private", "secret")
 
-    assert path.name == "hero.html"
-    assert path.exists()
-    assert load_template(tmp_path, "hero") == "<section>hi</section>"
-
-
-def test_save_creates_directory(tmp_path: Path) -> None:
-    target = tmp_path / "nested" / "templates"
-    save_template(target, "page", "<p>x</p>")
-
-    assert (target / "page.html").exists()
+    assert assets.list_templates(OTHER_ID) == []
+    with pytest.raises(ReusableAssetNotFoundError):
+        assets.load_template(OTHER_ID, "private")
+    assets.delete_template(OTHER_ID, "private")
+    assert assets.load_template(OWNER_ID, "private") == "secret"
 
 
-def test_list_templates_returns_sorted_stems(tmp_path: Path) -> None:
-    save_template(tmp_path, "beta", "<p>1</p>")
-    save_template(tmp_path, "alpha", "<p>2</p>")
-    (tmp_path / "notes.txt").write_text("not a template", encoding="utf-8")
+def test_layout_dna_names_are_unique_and_owner_scoped(
+    assets: ReusableAssetService,
+) -> None:
+    dna = LayoutDNA(("header", "main", "footer"), script_statement_count=2)
 
-    assert list_templates(tmp_path) == ["alpha", "beta"]
+    first = assets.save_dna(OWNER_ID, dna)
+    second = assets.save_dna(OWNER_ID, dna)
 
-
-def test_list_templates_missing_dir_returns_empty(tmp_path: Path) -> None:
-    assert list_templates(tmp_path / "does-not-exist") == []
-
-
-def test_load_missing_template_raises(tmp_path: Path) -> None:
-    with pytest.raises(FileNotFoundError):
-        load_template(tmp_path, "missing")
-
-
-def test_delete_template_removes_file(tmp_path: Path) -> None:
-    save_template(tmp_path, "page", "<p>x</p>")
-    delete_template(tmp_path, "page")
-
-    assert not (tmp_path / "page.html").exists()
-    assert list_templates(tmp_path) == []
+    assert first["name"] == "header_main_footer"
+    assert second["name"] == "header_main_footer-2"
+    assert first["signature"] == "header/main/footer"
+    assert "at most ~2 statements" in first["guidance"]
+    assert len(assets.list_dnas(OWNER_ID)) == 2
+    assert assets.list_dnas(OTHER_ID) == []
 
 
-def test_delete_template_is_idempotent(tmp_path: Path) -> None:
-    delete_template(tmp_path, "never-existed")
+def test_duplicate_long_layout_dna_name_stays_within_storage_limit(
+    assets: ReusableAssetService,
+) -> None:
+    dna = LayoutDNA(("section" * 20,))
+
+    first = assets.save_dna(OWNER_ID, dna)
+    second = assets.save_dna(OWNER_ID, dna)
+
+    assert len(first["name"]) <= 80
+    assert len(second["name"]) <= 80
+    assert second["name"].endswith("-2")
