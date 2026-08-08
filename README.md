@@ -34,6 +34,7 @@ A sleek, minimalist web application builder powered by AI (Gemini / OpenRouter).
 - Self-contained output (no external frontend dependencies)
 - Durable projects with automatic SQLite development storage or PostgreSQL via `DATABASE_URL`
 - Immutable page revisions, debounced autosave, optimistic conflict detection, and restore
+- Email/password accounts with Argon2id hashing, opaque server-side sessions, and owner-isolated projects
 
 
 ## Setup
@@ -46,12 +47,14 @@ A sleek, minimalist web application builder powered by AI (Gemini / OpenRouter).
 2. Create a `.env` with an API key (see below).
    The default `DATABASE_URL` uses `./data/minimal-web-builder.db`; set a
    `postgresql+psycopg://...` URL for a production PostgreSQL database.
-3. Apply database migrations before starting a production/PostgreSQL deployment:
+3. Apply database migrations before starting a production/PostgreSQL deployment,
+   or when upgrading an existing SQLite database:
    ```bash
    alembic upgrade head
    ```
-   Local SQLite development creates its schema automatically; migrations remain
-   the canonical production schema history.
+   A new local SQLite database creates its schema automatically; migrations remain
+   the canonical upgrade and production schema history. The first account created
+   after this ownership migration claims projects created by the pre-auth version.
 4. Run both processes:
    ```bash
    # terminal 1: API
@@ -59,14 +62,17 @@ A sleek, minimalist web application builder powered by AI (Gemini / OpenRouter).
    # terminal 2: frontend
    cd web && npm run dev
    ```
-4. Open http://localhost:5173 (the Vite dev server proxies `/api` to :8000).
+5. Open http://localhost:5173 (the Vite dev server proxies `/api` to :8000),
+   create an account, and start a project. Set `SESSION_COOKIE_SECURE=true` in
+   HTTPS production deployments; customize `SESSION_HOURS` and `CORS_ORIGINS`
+   when the frontend and API use different origins.
 
 For a single-process production build, run `cd web && npm run build` then
 `uvicorn server.main:app --port 8000` and open http://localhost:8000/.
 
 ## Usage
 
-1. Once the app is running, you'll see a clean interface with a chat input at the bottom.
+1. Once the app is running, create an account or sign in to your private workspace.
 2. Open the sidebar to pick a generation **Profile** (Minimal, Startup Landing, Portfolio) or keep **Custom** to set tone, complexity, and strict minimal mode individually. Profile selection disables the manual controls and applies the profile's settings to the next generation.
 3. Type a description of the website you want to create, for example:
    - "Create a landing page for a coffee shop with a hero section, menu, and contact form"

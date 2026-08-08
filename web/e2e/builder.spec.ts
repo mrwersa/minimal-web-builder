@@ -5,6 +5,9 @@ const editedHtml =
   "<!doctype html><html><body><h1>Fern Coffee Roasters</h1></body></html>";
 
 test("generate, edit, undo, and export the page", async ({ page }) => {
+  await page.route("**/api/auth/me", (route) =>
+    route.fulfill({ json: { id: "user-1", email: "owner@example.test" } }),
+  );
   await page.route("**/api/options", (route) =>
     route.fulfill({
       json: {

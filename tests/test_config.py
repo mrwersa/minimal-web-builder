@@ -1,3 +1,5 @@
+import os
+
 from src.config import (
     DEFAULT_OPENROUTER_MODEL,
     GEMINI_PROVIDER,
@@ -55,6 +57,36 @@ def test_load_config_reads_database_url(monkeypatch) -> None:
     cfg = load_config(dotenv_path=_NO_DOTENV)
 
     assert cfg.database_url == "postgresql+psycopg://builder:test@db/builder"
+
+
+def test_load_config_reads_session_and_cors_settings(monkeypatch) -> None:
+    monkeypatch.setenv("SESSION_COOKIE_SECURE", "true")
+    monkeypatch.setenv("SESSION_HOURS", "24")
+    monkeypatch.setenv("CORS_ORIGINS", "https://builder.example, https://admin.example")
+
+    cfg = load_config(dotenv_path=_NO_DOTENV)
+
+    assert cfg.session_cookie_secure is True
+    assert cfg.session_hours == 24
+    assert cfg.cors_origins == (
+        "https://builder.example",
+        "https://admin.example",
+    )
+
+
+def test_cors_settings_can_be_read_without_loading_dotenv_into_environment(
+    monkeypatch, tmp_path
+) -> None:
+    from src.config import cors_origins_from_env
+
+    monkeypatch.delenv("CORS_ORIGINS", raising=False)
+    env_file = tmp_path / ".env"
+    env_file.write_text(
+        "CORS_ORIGINS=https://builder.example\nSHOULD_NOT_LOAD=secret\n"
+    )
+
+    assert cors_origins_from_env(env_file) == ("https://builder.example",)
+    assert "SHOULD_NOT_LOAD" not in os.environ
 
 
 def test_load_config_defaults_to_gemini_provider(monkeypatch) -> None:

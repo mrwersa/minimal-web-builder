@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import * as api from "./api";
+import { errorMessage } from "./lib/errors";
 
 interface State {
   options: api.OptionsResponse | null;
@@ -96,10 +97,6 @@ function scheduleAutosave(get: () => State, delay = 800) {
 
 function hasPendingProjectChanges(state: State, projectId: string): boolean {
   return state.activeProjectId === projectId && state.saveState !== "saved";
-}
-
-function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error);
 }
 
 export const useStore = create<State>((set, get) => ({
@@ -599,3 +596,15 @@ export const useStore = create<State>((set, get) => ({
     scheduleAutosave(get);
   },
 }));
+
+export function resetWorkspace(): void {
+  if (autosaveTimer) {
+    clearTimeout(autosaveTimer);
+    autosaveTimer = null;
+  }
+  projectRequestSequence += 1;
+  useStore.setState({
+    ...useStore.getInitialState(),
+    threadId: crypto.randomUUID(),
+  });
+}

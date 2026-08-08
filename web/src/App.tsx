@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Toaster, toast } from "sonner";
-import { Eye, Code2, AlertCircle, Info, Sparkles, ArrowRight, Undo2, Redo2 } from "lucide-react";
+import { Eye, Code2, AlertCircle, Info, Sparkles, ArrowRight, Undo2, Redo2, LogOut } from "lucide-react";
 import Preview from "./components/Preview";
 import CodePanel from "./components/CodePanel";
 import Sidebar from "./components/Sidebar";
@@ -11,11 +11,36 @@ import { Button } from "./components/ui/Button";
 import { Textarea } from "./components/ui/Textarea";
 import { Spinner } from "./components/ui/Spinner";
 import { Badge } from "./components/ui/Badge";
+import AuthScreen from "./components/AuthScreen";
+import { useAuthStore } from "./authStore";
 
 type Tab = "preview" | "code";
 
 export default function App() {
+  const restoreSession = useAuthStore((state) => state.restoreSession);
+  const loading = useAuthStore((state) => state.loading);
+  const user = useAuthStore((state) => state.user);
+
+  useEffect(() => {
+    void restoreSession();
+  }, [restoreSession]);
+
+  if (loading) {
+    return (
+      <main className="flex h-full items-center justify-center bg-bg" aria-label="Loading session">
+        <Spinner />
+      </main>
+    );
+  }
+  if (!user) return <AuthScreen />;
+  return <BuilderApp />;
+}
+
+function BuilderApp() {
   const loadOptions = useStore((s) => s.loadOptions);
+  const user = useAuthStore((state) => state.user);
+  const logout = useAuthStore((state) => state.logout);
+  const authSubmitting = useAuthStore((state) => state.submitting);
   const code = useStore((s) => s.code);
   const busy = useStore((s) => s.busy);
   const error = useStore((s) => s.error);
@@ -103,6 +128,18 @@ export default function App() {
               <Redo2 className="h-4 w-4" />
             </button>
             <StatusIndicator status={status} />
+            <span className="hidden max-w-48 truncate text-xs text-muted lg:inline">
+              {user?.email}
+            </span>
+            <button
+              aria-label="Sign out"
+              className="rounded-lg p-1.5 text-muted2 transition-colors hover:bg-bg hover:text-text2 disabled:opacity-50"
+              disabled={authSubmitting}
+              onClick={() => void logout()}
+              title="Sign out"
+            >
+              <LogOut className="h-4 w-4" />
+            </button>
             <button
               onClick={() => setShowChat(!showChat)}
               className={cn(

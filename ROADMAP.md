@@ -56,12 +56,14 @@ Goal: users can safely leave and return to their work.
 - ✅ Add project create/open controls backed by the API.
 - ✅ Add debounced autosave with optimistic concurrency and visible conflict detection.
 - ✅ Add revision history and restore-as-new-revision.
-- ⬜ Add `users`, `conversations`, and `generation_jobs` persistence.
+- ✅ Add `users` and opaque server-side session persistence.
+- ⬜ Add `conversations` and `generation_jobs` persistence.
 - ✅ Add Alembic database migrations and keep runtime schema creation local to SQLite.
 - ✅ Expand the project browser with rename, duplicate, archive, and search.
 - ⬜ Add named checkpoints and duplicate-from-revision.
 - Move templates and Layout DNA into owner-scoped records.
-- Add authentication, project authorization, rate limits, and audit events.
+- ✅ Add first-party authentication and project authorization.
+- Add rate limits and audit events.
 - Unify `/generate`, `/generate-section`, and `/chat` behind one generation orchestrator.
 - Persist conversation checkpoints instead of using process-local memory.
 

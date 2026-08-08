@@ -9,6 +9,11 @@ export interface OptionsResponse {
   tokens: Record<string, string>;
 }
 
+export interface User {
+  id: string;
+  email: string;
+}
+
 export interface GenerateResponse {
   html: string;
   safety_alerts: string[];
@@ -89,6 +94,31 @@ async function requestJson<T>(
   fallback = `request ${url}`,
 ): Promise<T> {
   return readJson<T>(await fetch(url, init), fallback);
+}
+
+export async function fetchCurrentUser(): Promise<User> {
+  return requestJson("/api/auth/me", undefined, "Unable to restore your session");
+}
+
+export async function register(email: string, password: string): Promise<User> {
+  return requestJson(
+    "/api/auth/register",
+    jsonRequest("POST", { email, password }),
+    "Unable to create account",
+  );
+}
+
+export async function login(email: string, password: string): Promise<User> {
+  return requestJson(
+    "/api/auth/login",
+    jsonRequest("POST", { email, password }),
+    "Unable to sign in",
+  );
+}
+
+export async function logout(): Promise<void> {
+  const response = await fetch("/api/auth/logout", { method: "POST" });
+  if (!response.ok) throw new Error("Unable to sign out");
 }
 
 export async function fetchOptions(): Promise<OptionsResponse> {

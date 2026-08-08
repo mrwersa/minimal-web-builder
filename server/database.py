@@ -36,3 +36,28 @@ def is_sqlite_url(database_url: str) -> bool:
 
 def create_session_factory(engine: Engine) -> sessionmaker[Session]:
     return sessionmaker(engine, expire_on_commit=False)
+
+
+class Database:
+    """Own the shared engine and session factory for one application process."""
+
+    def __init__(self, engine: Engine):
+        self.engine = engine
+        self.sessions = create_session_factory(engine)
+
+    @classmethod
+    def from_url(
+        cls, database_url: str, *, create_schema: bool | None = None
+    ) -> Database:
+        engine = create_database_engine(database_url)
+        if create_schema is None:
+            create_schema = is_sqlite_url(database_url)
+        if create_schema:
+            # Import models before creating metadata when this module is used directly.
+            import server.models  # noqa: F401
+
+            Base.metadata.create_all(engine)
+        return cls(engine)
+
+    def close(self) -> None:
+        self.engine.dispose()
