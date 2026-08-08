@@ -27,6 +27,7 @@ vi.mock("./api", () => ({
   savePage: vi.fn(),
   fetchRevisions: vi.fn(),
   restoreRevision: vi.fn(),
+  fetchConversation: vi.fn(),
 }));
 
 import { useStore } from "./store";
@@ -89,6 +90,7 @@ describe("document revision workflows", () => {
     });
     vi.mocked(api.fetchProjects).mockResolvedValue([]);
     vi.mocked(api.fetchRevisions).mockResolvedValue([]);
+    vi.mocked(api.fetchConversation).mockResolvedValue(null);
   });
 
   it("generates from constraints without a prompt", async () => {
@@ -130,6 +132,22 @@ describe("document revision workflows", () => {
     expect(useStore.getState().code).toBe("<html>template</html>");
     expect(useStore.getState().chatMessages).toEqual([]);
     expect(useStore.getState().undoStack).toEqual(["<html>old</html>"]);
+  });
+
+  it("restores a durable conversation checkpoint", async () => {
+    vi.mocked(api.fetchConversation).mockResolvedValue({
+      thread_id: useStore.getState().threadId,
+      messages: [{ role: "assistant", content: "Welcome back" }],
+      current_code: "<html>restored</html>",
+    });
+
+    await useStore.getState().restoreConversation();
+
+    expect(useStore.getState().code).toBe("<html>restored</html>");
+    expect(useStore.getState().chatMessages).toEqual([
+      { role: "assistant", content: "Welcome back" },
+    ]);
+    expect(useStore.getState().undoStack).toEqual([]);
   });
 
   it("creates a durable project from the current document", async () => {

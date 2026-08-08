@@ -3,7 +3,7 @@
 The agent wraps the existing src/* generation, safety, and a11y logic in a
 stateful graph with:
 
-- **Memory**: conversation history persisted per ``thread_id`` via a checkpointer.
+- **Memory**: conversation history supplied by the durable orchestration layer.
 - **Intent classification**: routes user input to generate / refine / answer.
 - **Guardrails**: every generation passes through safety + a11y + HTML validation;
   failures route to a retry node (capped at ``MAX_RETRIES``).
@@ -19,7 +19,6 @@ from __future__ import annotations
 import re
 from typing import Annotated, Any, TypedDict
 
-from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph import END, START, StateGraph
 from langgraph.graph.message import add_messages
 
@@ -275,7 +274,7 @@ def _build_default_client() -> GenerationClient:
 
 
 def build_graph():
-    """Create and compile the LangGraph agent with a memory checkpointer."""
+    """Create and compile the stateless LangGraph workflow."""
     graph = StateGraph(BuilderState)
 
     graph.add_node("classify_intent", _classify_intent)
@@ -313,7 +312,7 @@ def build_graph():
     graph.add_edge("error_fallback", END)
     graph.add_edge("answer", END)
 
-    return graph.compile(checkpointer=MemorySaver())
+    return graph.compile()
 
 
 # Singleton graph instance
@@ -333,15 +332,16 @@ def run_agent(
     thread_id: str = "default",
     current_code: str | None = None,
     settings: dict[str, Any] | None = None,
+    history: list[dict[str, str]] | None = None,
 ) -> dict[str, Any]:
     """Run the agent for one user turn. Returns the final state snapshot."""
     graph = get_graph()
-    config = {"configurable": {"thread_id": thread_id}}
+    del thread_id  # Kept as a backwards-compatible API parameter.
 
     # Build the initial state for this turn
     initial: dict[str, Any] = {
         "user_input": user_input,
-        "messages": [{"role": "user", "content": user_input}],
+        "messages": [*(history or []), {"role": "user", "content": user_input}],
         "retry_count": 0,
         "validation_errors": [],
         "validation_notes": [],
@@ -354,12 +354,12 @@ def run_agent(
         initial["messages"].insert(
             0,
             {
-                "role": "assistant",
+                "role": "system",
                 "content": f"Here is the current version of the website code:\n\n{current_code.strip()}",
             },
         )
     else:
         initial["current_code"] = None
 
-    result = graph.invoke(initial, config=config)
+    result = graph.invoke(initial)
     return result

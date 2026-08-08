@@ -38,6 +38,7 @@ export default function App() {
 
 function BuilderApp() {
   const loadOptions = useStore((s) => s.loadOptions);
+  const restoreConversation = useStore((s) => s.restoreConversation);
   const user = useAuthStore((state) => state.user);
   const logout = useAuthStore((state) => state.logout);
   const authSubmitting = useAuthStore((state) => state.submitting);
@@ -59,6 +60,7 @@ function BuilderApp() {
   const wasBusy = useRef(false);
 
   useEffect(() => { loadOptions(); }, [loadOptions]);
+  useEffect(() => { void restoreConversation(); }, [restoreConversation]);
   useEffect(() => { if (safetyAlerts.length) toast.warning("Safety: " + safetyAlerts.join(", ")); }, [safetyAlerts]); // eslint-disable-line
   useEffect(() => { if (error) toast.error(error); }, [error]); // eslint-disable-line
   useEffect(() => {

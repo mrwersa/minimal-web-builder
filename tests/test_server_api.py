@@ -7,6 +7,7 @@ from server.assets import ReusableAssetService
 from server.auth import AuthService
 from server.database import Database
 from server.main import app
+from server.orchestrator import GenerationOrchestrator
 from server.projects import ProjectService
 from server.runtime import GenerationClient
 from src.config import AppConfig
@@ -38,6 +39,7 @@ def client(monkeypatch: pytest.MonkeyPatch, tmp_path):
     app.state.auth = AuthService(database.sessions, session_hours=cfg.session_hours)
     app.state.projects = ProjectService(database.sessions)
     app.state.assets = ReusableAssetService(database.sessions)
+    app.state.orchestrator = GenerationOrchestrator(database.sessions)
     test_client = TestClient(app)
     response = test_client.post(
         "/api/auth/register",
@@ -101,6 +103,9 @@ def test_generate_uses_mocked_output(
     j = r.json()
     assert "<h1>Hi</h1>" in j["html"]
     assert j["settings"]["tone"] == "minimal"
+    jobs = client.get("/api/generation-jobs").json()["jobs"]
+    assert jobs[0]["operation"] == "generate"
+    assert jobs[0]["status"] == "succeeded"
 
 
 def test_generate_rejects_empty_prompt(client: TestClient) -> None:
@@ -137,6 +142,7 @@ def test_generate_propagates_api_errors(
     r = client.post("/api/generate", json={"prompt": "x"})
     assert r.status_code == 502
     assert "boom" in r.json()["detail"]
+    assert client.get("/api/generation-jobs").json()["jobs"][0]["status"] == "failed"
 
 
 def test_generate_section_replaces_section(
@@ -204,6 +210,27 @@ def test_layout_dna_round_trip(client: TestClient) -> None:
     listed = client.get("/api/layout-dnas")
     assert listed.status_code == 200
     assert listed.json()["dnas"][0]["signature"] == "header/main/footer"
+
+
+def test_chat_checkpoint_and_job_are_durable(client: TestClient) -> None:
+    response = client.post(
+        "/api/chat",
+        json={"message": "hello", "thread_id": "conversation-1"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["intent"] == "answer"
+    app.state.orchestrator = GenerationOrchestrator(app.state.database.sessions)
+    checkpoint = client.get("/api/conversations/conversation-1")
+    assert checkpoint.status_code == 200
+    assert checkpoint.json()["thread_id"] == "conversation-1"
+    assert [item["role"] for item in checkpoint.json()["messages"]] == [
+        "user",
+        "assistant",
+    ]
+    jobs = client.get("/api/generation-jobs").json()["jobs"]
+    assert jobs[0]["operation"] == "chat"
+    assert jobs[0]["status"] == "succeeded"
 
 
 def test_project_revision_api_round_trip(client: TestClient) -> None:
@@ -340,3 +367,20 @@ def test_reusable_assets_are_isolated_between_users(client: TestClient) -> None:
     assert client.get("/api/templates").json()["templates"] == []
     assert client.get("/api/templates/private").status_code == 404
     assert client.get("/api/layout-dnas").json()["dnas"] == []
+
+
+def test_conversations_and_jobs_are_isolated_between_users(client: TestClient) -> None:
+    assert (
+        client.post(
+            "/api/chat", json={"message": "hello", "thread_id": "private-thread"}
+        ).status_code
+        == 200
+    )
+    client.post("/api/auth/logout")
+    client.post(
+        "/api/auth/register",
+        json={"email": "second@example.test", "password": "another secure password"},
+    )
+
+    assert client.get("/api/conversations/private-thread").status_code == 404
+    assert client.get("/api/generation-jobs").json()["jobs"] == []
