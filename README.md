@@ -111,6 +111,24 @@ To edit the generated page directly, turn on **WYSIWYG editing** in the sidebar 
 - Node.js 24+
 - See `requirements.txt` and `web/package.json`
 
+## Verification
+
+```bash
+# Backend
+coverage run -m pytest -q
+coverage report --include="src/*,server/*" --fail-under=70
+
+# Frontend unit, type, and build gates
+cd web
+npm run typecheck
+npm test
+npm run build
+
+# Critical browser workflow (install Chromium once first)
+npx playwright install chromium
+npm run test:e2e
+```
+
 ## Repository Protection
 
 This repository uses PR-only governance on the main branch:
@@ -123,7 +141,7 @@ This repository uses PR-only governance on the main branch:
 - Conversation resolution is required before merge
 - Linear history is required
 - Force pushes and branch deletions are blocked
-- CI status checks `ci / validate` (context: `validate`) and `ci / lint` (context: `lint`) are required
+- CI runs backend validation, lint/format, frontend type/test/build, and Chromium browser-smoke gates
 
 See:
 
@@ -138,7 +156,7 @@ The detailed roadmap is in [ROADMAP.md](ROADMAP.md).
 
 Current priorities:
 
-- Phase 0: product truth, reversible document changes, editor reliability, and full-stack CI
+- Phase 0: complete — product truth, reversible document changes, editor reliability, and full-stack CI
 - Phase 1: persistent projects, users, autosave, and durable revisions
 - Phase 2: a structured document model and trustworthy responsive visual editor
 - Phase 3: cancellable, measurable, patch-based AI generation

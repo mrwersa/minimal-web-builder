@@ -7,6 +7,8 @@ htmlcov/
 templates/
 layout_dna/
 data/
+web/playwright-report/
+web/test-results/
 
 # React frontend
 web/node_modules/

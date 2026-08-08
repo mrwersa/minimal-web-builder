@@ -3,7 +3,6 @@ import * as api from "./api";
 
 interface State {
   options: api.OptionsResponse | null;
-  optionsLoading: boolean;
   optionsError: string | null;
 
   profile: string;
@@ -27,15 +26,19 @@ interface State {
   error: string | null;
 
   sections: api.SectionInfo[];
+  sectionsError: string | null;
   sectionIndex: number;
   refineAspect: string;
 
   templates: string[];
+  templatesError: string | null;
   templateName: string;
 
   dnas: api.DnaItem[];
+  dnasError: string | null;
 
   projects: api.ProjectSummary[];
+  projectsError: string | null;
   projectName: string;
   projectSearch: string;
   activeProjectId: string | null;
@@ -95,9 +98,12 @@ function hasPendingProjectChanges(state: State, projectId: string): boolean {
   return state.activeProjectId === projectId && state.saveState !== "saved";
 }
 
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
 export const useStore = create<State>((set, get) => ({
   options: null,
-  optionsLoading: true,
   optionsError: null,
 
   profile: "custom",
@@ -121,15 +127,19 @@ export const useStore = create<State>((set, get) => ({
   error: null,
 
   sections: [],
+  sectionsError: null,
   sectionIndex: 0,
   refineAspect: "general",
 
   templates: [],
+  templatesError: null,
   templateName: "",
 
   dnas: [],
+  dnasError: null,
 
   projects: [],
+  projectsError: null,
   projectName: "",
   projectSearch: "",
   activeProjectId: null,
@@ -148,12 +158,12 @@ export const useStore = create<State>((set, get) => ({
   set: (key, value) => set({ [key]: value } as Partial<State>),
 
   loadOptions: async () => {
-    set({ optionsLoading: true, optionsError: null });
+    set({ optionsError: null });
     try {
       const opts = await api.fetchOptions();
-      set({ options: opts, optionsLoading: false });
+      set({ options: opts });
     } catch (e) {
-      set({ optionsLoading: false, optionsError: String(e instanceof Error ? e.message : e) });
+      set({ optionsError: errorMessage(e) });
     }
   },
 
@@ -173,7 +183,7 @@ export const useStore = create<State>((set, get) => ({
       get().setCodeWithHistory(res.html);
       set({ notes: res.notes, safetyAlerts: res.safety_alerts, busy: false });
     } catch (e) {
-      set({ busy: false, error: String(e instanceof Error ? e.message : e) });
+      set({ busy: false, error: errorMessage(e) });
     }
   },
 
@@ -197,21 +207,25 @@ export const useStore = create<State>((set, get) => ({
       get().setCodeWithHistory(res.html);
       set({ notes: res.notes, safetyAlerts: res.safety_alerts, busy: false });
     } catch (e) {
-      set({ busy: false, error: String(e instanceof Error ? e.message : e) });
+      set({ busy: false, error: errorMessage(e) });
     }
   },
 
   refreshSections: async () => {
     const s = get();
     if (!s.code) {
-      set({ sections: [], sectionIndex: 0 });
+      set({ sections: [], sectionsError: null, sectionIndex: 0 });
       return;
     }
     try {
       const sections = await api.fetchSections(s.code);
-      set({ sections, sectionIndex: Math.min(s.sectionIndex, Math.max(0, sections.length - 1)) });
-    } catch {
-      set({ sections: [] });
+      set({
+        sections,
+        sectionsError: null,
+        sectionIndex: Math.min(s.sectionIndex, Math.max(0, sections.length - 1)),
+      });
+    } catch (error) {
+      set({ sections: [], sectionsError: errorMessage(error) });
     }
   },
 
@@ -234,15 +248,15 @@ export const useStore = create<State>((set, get) => ({
       get().setCodeWithHistory(res.html);
       set({ notes: res.notes, safetyAlerts: res.safety_alerts, busy: false });
     } catch (e) {
-      set({ busy: false, error: String(e instanceof Error ? e.message : e) });
+      set({ busy: false, error: errorMessage(e) });
     }
   },
 
   refreshTemplates: async () => {
     try {
-      set({ templates: await api.fetchTemplates() });
-    } catch {
-      /* ignore */
+      set({ templates: await api.fetchTemplates(), templatesError: null });
+    } catch (error) {
+      set({ templatesError: errorMessage(error) });
     }
   },
 
@@ -254,7 +268,7 @@ export const useStore = create<State>((set, get) => ({
       set({ templateName: "" });
       await get().refreshTemplates();
     } catch (e) {
-      set({ error: String(e instanceof Error ? e.message : e) });
+      set({ error: errorMessage(e) });
     }
   },
 
@@ -270,7 +284,7 @@ export const useStore = create<State>((set, get) => ({
         error: null,
       });
     } catch (e) {
-      set({ error: String(e instanceof Error ? e.message : e) });
+      set({ error: errorMessage(e) });
     }
   },
 
@@ -279,15 +293,15 @@ export const useStore = create<State>((set, get) => ({
       await api.deleteTemplate(name);
       await get().refreshTemplates();
     } catch (e) {
-      set({ error: String(e instanceof Error ? e.message : e) });
+      set({ error: errorMessage(e) });
     }
   },
 
   refreshDnas: async () => {
     try {
-      set({ dnas: await api.fetchDnas() });
-    } catch {
-      /* ignore */
+      set({ dnas: await api.fetchDnas(), dnasError: null });
+    } catch (error) {
+      set({ dnasError: errorMessage(error) });
     }
   },
 
@@ -298,7 +312,7 @@ export const useStore = create<State>((set, get) => ({
       await api.saveDna(s.code);
       await get().refreshDnas();
     } catch (e) {
-      set({ error: String(e instanceof Error ? e.message : e) });
+      set({ error: errorMessage(e) });
     }
   },
 
@@ -306,10 +320,12 @@ export const useStore = create<State>((set, get) => ({
     const requestSequence = ++projectRequestSequence;
     try {
       const projects = await api.fetchProjects(get().projectSearch);
-      if (requestSequence === projectRequestSequence) set({ projects });
+      if (requestSequence === projectRequestSequence) {
+        set({ projects, projectsError: null });
+      }
     } catch (e) {
       if (requestSequence === projectRequestSequence) {
-        set({ error: String(e instanceof Error ? e.message : e) });
+        set({ projectsError: errorMessage(e) });
       }
     }
   },
@@ -333,7 +349,7 @@ export const useStore = create<State>((set, get) => ({
       await get().refreshProjects();
       await get().refreshRevisions();
     } catch (e) {
-      set({ error: String(e instanceof Error ? e.message : e) });
+      set({ error: errorMessage(e) });
     }
   },
 
@@ -370,7 +386,7 @@ export const useStore = create<State>((set, get) => ({
       });
       await get().refreshRevisions();
     } catch (e) {
-      set({ error: String(e instanceof Error ? e.message : e) });
+      set({ error: errorMessage(e) });
     }
   },
 
@@ -382,7 +398,7 @@ export const useStore = create<State>((set, get) => ({
       await get().refreshProjects();
       set({ error: null });
     } catch (e) {
-      set({ error: String(e instanceof Error ? e.message : e) });
+      set({ error: errorMessage(e) });
     }
   },
 
@@ -396,7 +412,7 @@ export const useStore = create<State>((set, get) => ({
       await get().refreshProjects();
       await get().openProject(project.id);
     } catch (e) {
-      set({ error: String(e instanceof Error ? e.message : e) });
+      set({ error: errorMessage(e) });
     }
   },
 
@@ -419,7 +435,7 @@ export const useStore = create<State>((set, get) => ({
       await get().refreshProjects();
       set({ error: null });
     } catch (e) {
-      set({ error: String(e instanceof Error ? e.message : e) });
+      set({ error: errorMessage(e) });
     }
   },
 
@@ -455,7 +471,7 @@ export const useStore = create<State>((set, get) => ({
         set({
           saveState: "idle",
           saveQueued: false,
-          error: String(e instanceof Error ? e.message : e),
+          error: errorMessage(e),
         });
       }
     }
@@ -470,7 +486,7 @@ export const useStore = create<State>((set, get) => ({
     try {
       set({ revisions: await api.fetchRevisions(pageId) });
     } catch (e) {
-      set({ error: String(e instanceof Error ? e.message : e) });
+      set({ error: errorMessage(e) });
     }
   },
 
@@ -497,7 +513,7 @@ export const useStore = create<State>((set, get) => ({
       if (e instanceof api.PageVersionConflictError) {
         set({ saveState: "conflict", error: e.message });
       } else {
-        set({ error: String(e instanceof Error ? e.message : e) });
+        set({ error: errorMessage(e) });
       }
     }
   },
@@ -531,7 +547,7 @@ export const useStore = create<State>((set, get) => ({
       });
       if (res.error) set({ error: res.error });
     } catch (e) {
-      set({ busy: false, error: String(e instanceof Error ? e.message : e) });
+      set({ busy: false, error: errorMessage(e) });
     }
   },
 

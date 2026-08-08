@@ -23,7 +23,7 @@ from one mutable HTML string to a structured page document with stable element I
 - Keep the visual editor behind a canvas adapter; it must not become the persistence format.
 - Avoid microservices, real-time multiplayer, and plugins until the core single-user loop is excellent.
 
-## Phase 0: Product truth and reliability 🔄
+## Phase 0: Product truth and reliability ✅
 
 Goal: make every documented workflow reliable before adding platform infrastructure.
 
@@ -37,8 +37,8 @@ Goal: make every documented workflow reliable before adding platform infrastruct
 - ✅ Add regression tests for constraint generation, template loading, revision history,
   and editor document round trips.
 - ✅ Replace the legacy Streamlit-era roadmap and correct the user documentation.
-- ⬜ Add browser-level smoke tests for generate → edit → undo → export.
-- ⬜ Add explicit, actionable errors for failed sidebar data loads.
+- ✅ Add browser-level smoke tests for generate → edit → undo → export.
+- ✅ Add explicit, actionable errors for failed sidebar data loads.
 
 Exit metrics:
 
