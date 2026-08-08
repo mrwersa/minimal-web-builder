@@ -57,8 +57,8 @@ Goal: users can safely leave and return to their work.
 - ✅ Add debounced autosave with optimistic concurrency and visible conflict detection.
 - ✅ Add revision history and restore-as-new-revision.
 - ⬜ Add `users`, `conversations`, and `generation_jobs` persistence.
-- ⬜ Add database migrations before production deployment.
-- ⬜ Expand the project browser with rename, duplicate, archive, and search.
+- ✅ Add Alembic database migrations and keep runtime schema creation local to SQLite.
+- ✅ Expand the project browser with rename, duplicate, archive, and search.
 - ⬜ Add named checkpoints and duplicate-from-revision.
 - Move templates and Layout DNA into owner-scoped records.
 - Add authentication, project authorization, rate limits, and audit events.

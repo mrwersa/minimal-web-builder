@@ -7,14 +7,12 @@ layer, plus a LangGraph conversational agent (/api/chat).
 
 from __future__ import annotations
 
-import asyncio
 import typing
 from contextlib import asynccontextmanager
-from functools import partial
 from pathlib import Path
 from typing import Any
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
@@ -22,6 +20,8 @@ from pydantic import BaseModel
 
 from server.agent import run_agent
 from server.agent import set_client as set_agent_client
+from server.concurrency import offload
+from server.project_routes import router as project_router
 from server.projects import (
     ProjectNotFoundError,
     ProjectService,
@@ -51,7 +51,7 @@ from src.profiles import (
     load_profiles,
 )
 from src.safety import apply_output_safety_policy
-from src.sections import extract_sections, replace_section
+from src.sections import extract_first_top_level, extract_sections, replace_section
 from src.templates import (
     delete_template,
     list_templates,
@@ -96,6 +96,36 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+app.include_router(project_router)
+
+
+@app.exception_handler(ProjectNotFoundError)
+async def project_not_found_handler(
+    _request: Request, exc: ProjectNotFoundError
+) -> JSONResponse:
+    return JSONResponse(status_code=404, content={"detail": str(exc)})
+
+
+@app.exception_handler(ProjectValidationError)
+async def project_validation_handler(
+    _request: Request, exc: ProjectValidationError
+) -> JSONResponse:
+    return JSONResponse(status_code=400, content={"detail": str(exc)})
+
+
+@app.exception_handler(VersionConflictError)
+async def version_conflict_handler(
+    _request: Request, exc: VersionConflictError
+) -> JSONResponse:
+    return JSONResponse(
+        status_code=409,
+        content={
+            "detail": {
+                "message": "Page has a newer revision",
+                "current_version": exc.current_version,
+            }
+        },
+    )
 
 
 def _client() -> GenerationClient:
@@ -104,15 +134,6 @@ def _client() -> GenerationClient:
 
 def _profiles():
     return app.state.profiles
-
-
-def _projects() -> ProjectService:
-    return app.state.projects
-
-
-async def _offload(function, /, *args, **kwargs):
-    """Run blocking provider, database, or filesystem work outside the event loop."""
-    return await asyncio.to_thread(partial(function, *args, **kwargs))
 
 
 def _sanitize_output(raw: str) -> tuple[str, list[str], list[str]]:
@@ -157,32 +178,6 @@ class ExportRequest(BaseModel):
 
 class SaveDnaRequest(BaseModel):
     html: str
-
-
-class ApplyDnaRequest(BaseModel):
-    name: str
-
-
-class ProjectCreateRequest(BaseModel):
-    name: str
-    html: str = ""
-
-
-class ProjectUpdateRequest(BaseModel):
-    name: str
-
-
-class PageSaveRequest(BaseModel):
-    html: str
-    expected_version: int
-    source: str = "autosave"
-
-
-class RevisionRestoreRequest(BaseModel):
-    expected_version: int
-
-
-# ---- startup ----
 
 
 # ---- routes ----
@@ -273,7 +268,7 @@ async def generate_page(req: GenerateRequest) -> JSONResponse:
     if req.layout_dna_guidance:
         extra = f"{extra}\n{req.layout_dna_guidance}".strip()
 
-    raw = await _offload(
+    raw = await offload(
         generate,
         _client(),
         messages=messages,
@@ -351,7 +346,7 @@ async def chat(req: ChatRequest) -> JSONResponse:
             f"{settings.get('extra_guidance', '')}\n{req.layout_dna_guidance}".strip()
         )
 
-    result = await _offload(
+    result = await offload(
         run_agent,
         validated,
         thread_id=req.thread_id,
@@ -413,7 +408,7 @@ async def generate_section(req: SectionRegenRequest) -> JSONResponse:
     if req.layout_dna_guidance:
         extra = f"{extra}\n{req.layout_dna_guidance}".strip()
 
-    raw = await _offload(
+    raw = await offload(
         regenerate_section,
         _client(),
         current_code=req.code,
@@ -429,9 +424,6 @@ async def generate_section(req: SectionRegenRequest) -> JSONResponse:
         raise HTTPException(status_code=502, detail=raw)
 
     sanitized, safety_alerts, notes = _sanitize_output(raw)
-    from src.generation import strip_html_code_fence
-    from src.sections import extract_first_top_level
-
     replacement = extract_first_top_level(strip_html_code_fence(sanitized))
     if not replacement:
         raise HTTPException(
@@ -447,126 +439,15 @@ async def generate_section(req: SectionRegenRequest) -> JSONResponse:
     )
 
 
-# ---- templates ----
-
-
-# ---- projects and immutable revisions ----
-
-
-@app.get("/api/projects")
-async def projects_list(include_archived: bool = False) -> dict[str, Any]:
-    projects = await _offload(
-        _projects().list_projects, include_archived=include_archived
-    )
-    return {"projects": projects}
-
-
-@app.post("/api/projects", status_code=201)
-async def projects_create(req: ProjectCreateRequest) -> dict[str, Any]:
-    try:
-        return await _offload(_projects().create_project, req.name, req.html)
-    except ProjectValidationError as exc:
-        raise HTTPException(status_code=400, detail=str(exc))
-
-
-@app.get("/api/projects/{project_id}")
-async def projects_get(project_id: str) -> dict[str, Any]:
-    try:
-        return await _offload(_projects().get_project, project_id)
-    except ProjectNotFoundError as exc:
-        raise HTTPException(status_code=404, detail=str(exc))
-
-
-@app.patch("/api/projects/{project_id}")
-async def projects_update(project_id: str, req: ProjectUpdateRequest) -> dict[str, Any]:
-    try:
-        return await _offload(_projects().rename_project, project_id, req.name)
-    except ProjectNotFoundError as exc:
-        raise HTTPException(status_code=404, detail=str(exc))
-    except ProjectValidationError as exc:
-        raise HTTPException(status_code=400, detail=str(exc))
-
-
-@app.delete("/api/projects/{project_id}")
-async def projects_archive(project_id: str) -> dict[str, Any]:
-    try:
-        return await _offload(_projects().archive_project, project_id)
-    except ProjectNotFoundError as exc:
-        raise HTTPException(status_code=404, detail=str(exc))
-
-
-@app.get("/api/pages/{page_id}")
-async def pages_get(page_id: str) -> dict[str, Any]:
-    try:
-        return await _offload(_projects().get_page, page_id)
-    except ProjectNotFoundError as exc:
-        raise HTTPException(status_code=404, detail=str(exc))
-
-
-@app.put("/api/pages/{page_id}/document")
-async def pages_save(page_id: str, req: PageSaveRequest) -> dict[str, Any]:
-    try:
-        return await _offload(
-            _projects().save_page,
-            page_id,
-            req.html,
-            expected_version=req.expected_version,
-            source=req.source,
-        )
-    except ProjectNotFoundError as exc:
-        raise HTTPException(status_code=404, detail=str(exc))
-    except ProjectValidationError as exc:
-        raise HTTPException(status_code=400, detail=str(exc))
-    except VersionConflictError as exc:
-        raise HTTPException(
-            status_code=409,
-            detail={
-                "message": "Page has a newer revision",
-                "current_version": exc.current_version,
-            },
-        )
-
-
-@app.get("/api/pages/{page_id}/revisions")
-async def revisions_list(page_id: str) -> dict[str, Any]:
-    try:
-        return {"revisions": await _offload(_projects().list_revisions, page_id)}
-    except ProjectNotFoundError as exc:
-        raise HTTPException(status_code=404, detail=str(exc))
-
-
-@app.post("/api/pages/{page_id}/revisions/{revision_id}/restore")
-async def revisions_restore(
-    page_id: str, revision_id: str, req: RevisionRestoreRequest
-) -> dict[str, Any]:
-    try:
-        return await _offload(
-            _projects().restore_revision,
-            page_id,
-            revision_id,
-            expected_version=req.expected_version,
-        )
-    except ProjectNotFoundError as exc:
-        raise HTTPException(status_code=404, detail=str(exc))
-    except VersionConflictError as exc:
-        raise HTTPException(
-            status_code=409,
-            detail={
-                "message": "Page has a newer revision",
-                "current_version": exc.current_version,
-            },
-        )
-
-
 @app.get("/api/templates")
 async def templates_list() -> dict[str, Any]:
-    return {"templates": await _offload(list_templates, TEMPLATES_DIR)}
+    return {"templates": await offload(list_templates, TEMPLATES_DIR)}
 
 
 @app.post("/api/templates")
 async def templates_save(req: TemplateSaveRequest) -> dict[str, Any]:
     try:
-        saved = await _offload(save_template, TEMPLATES_DIR, req.name, req.html)
+        saved = await offload(save_template, TEMPLATES_DIR, req.name, req.html)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
     return {"saved": saved.stem}
@@ -575,7 +456,7 @@ async def templates_save(req: TemplateSaveRequest) -> dict[str, Any]:
 @app.get("/api/templates/{name}")
 async def templates_load(name: str) -> dict[str, str]:
     try:
-        html = await _offload(load_template, TEMPLATES_DIR, name)
+        html = await offload(load_template, TEMPLATES_DIR, name)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
     except FileNotFoundError:
@@ -585,7 +466,7 @@ async def templates_load(name: str) -> dict[str, str]:
 
 @app.delete("/api/templates/{name}")
 async def templates_delete(name: str) -> dict[str, Any]:
-    await _offload(delete_template, TEMPLATES_DIR, name)
+    await offload(delete_template, TEMPLATES_DIR, name)
     return {"deleted": name}
 
 
@@ -595,7 +476,7 @@ async def templates_delete(name: str) -> dict[str, Any]:
 @app.get("/api/layout-dnas")
 async def dnas_list() -> dict[str, Any]:
     items = []
-    for name, dna in await _offload(list_saved_dnas, LAYOUT_DNA_DIR):
+    for name, dna in await offload(list_saved_dnas, LAYOUT_DNA_DIR):
         items.append(
             {
                 "name": name,
@@ -609,7 +490,7 @@ async def dnas_list() -> dict[str, Any]:
 @app.post("/api/layout-dnas")
 async def dnas_save(req: SaveDnaRequest) -> dict[str, Any]:
     dna = extract_layout_dna(req.html)
-    saved = await _offload(save_dna, LAYOUT_DNA_DIR, dna)
+    saved = await offload(save_dna, LAYOUT_DNA_DIR, dna)
     return {"name": saved.stem, "signature": grammar_signature(dna)}
 
 

@@ -7,91 +7,41 @@ than on a particular database engine.
 
 from __future__ import annotations
 
-import uuid
-from datetime import UTC, datetime
-from pathlib import Path
 from typing import Any
 
 from sqlalchemy import (
-    DateTime,
-    ForeignKey,
-    Integer,
-    String,
-    Text,
-    UniqueConstraint,
-    create_engine,
+    Engine,
+    func,
     select,
+    update,
 )
-from sqlalchemy.engine import make_url
-from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column, sessionmaker
-from sqlalchemy.pool import StaticPool
+from sqlalchemy.orm import Session, sessionmaker
 
-MAX_PROJECT_NAME_CHARS = 120
+from server.database import (
+    Base,
+    create_database_engine,
+    create_session_factory,
+    is_sqlite_url,
+)
+from server.models import (
+    MAX_PROJECT_NAME_CHARS,
+    PageRecord,
+    ProjectRecord,
+    RevisionRecord,
+    isoformat_utc,
+    new_id,
+    utcnow,
+)
+
 MAX_DOCUMENT_CHARS = 2_000_000
-_REVISION_SOURCES = {"create", "autosave", "manual", "generation", "restore"}
-
-
-def _utcnow() -> datetime:
-    return datetime.now(UTC)
-
-
-def _new_id() -> str:
-    return str(uuid.uuid4())
-
-
-class Base(DeclarativeBase):
-    pass
-
-
-class ProjectRecord(Base):
-    __tablename__ = "projects"
-
-    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_new_id)
-    name: Mapped[str] = mapped_column(String(MAX_PROJECT_NAME_CHARS))
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=_utcnow
-    )
-    updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=_utcnow
-    )
-    archived_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-
-
-class PageRecord(Base):
-    __tablename__ = "pages"
-    __table_args__ = (UniqueConstraint("project_id", "slug"),)
-
-    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_new_id)
-    project_id: Mapped[str] = mapped_column(
-        String(36), ForeignKey("projects.id", ondelete="CASCADE"), index=True
-    )
-    name: Mapped[str] = mapped_column(String(MAX_PROJECT_NAME_CHARS))
-    slug: Mapped[str] = mapped_column(String(MAX_PROJECT_NAME_CHARS))
-    version: Mapped[int] = mapped_column(Integer, default=0)
-    current_revision_id: Mapped[str | None] = mapped_column(String(36))
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=_utcnow
-    )
-    updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=_utcnow
-    )
-
-
-class RevisionRecord(Base):
-    __tablename__ = "revisions"
-    __table_args__ = (UniqueConstraint("page_id", "sequence"),)
-
-    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_new_id)
-    page_id: Mapped[str] = mapped_column(
-        String(36), ForeignKey("pages.id", ondelete="CASCADE"), index=True
-    )
-    sequence: Mapped[int] = mapped_column(Integer)
-    html: Mapped[str] = mapped_column(Text)
-    source: Mapped[str] = mapped_column(String(32))
-    parent_revision_id: Mapped[str | None] = mapped_column(String(36))
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=_utcnow
-    )
+_REVISION_SOURCES = {
+    "create",
+    "duplicate",
+    "autosave",
+    "manual",
+    "generation",
+    "restore",
+}
 
 
 class ProjectNotFoundError(LookupError):
@@ -127,32 +77,30 @@ def _document(html: str) -> str:
     return html
 
 
+def _copy_name(name: str) -> str:
+    suffix = " Copy"
+    return f"{name[: MAX_PROJECT_NAME_CHARS - len(suffix)].rstrip()}{suffix}"
+
+
 class ProjectService:
-    def __init__(self, sessions: sessionmaker[Session]):
+    def __init__(self, sessions: sessionmaker[Session], engine: Engine):
         self._sessions = sessions
+        self._engine = engine
 
     def close(self) -> None:
         """Release pooled database connections during application shutdown."""
-        bind = self._sessions.kw.get("bind")
-        if bind is not None:
-            bind.dispose()
+        self._engine.dispose()
 
     @classmethod
-    def from_url(cls, database_url: str, *, create_schema: bool = True):
-        url = make_url(database_url)
-        engine_options: dict[str, Any] = {}
-        if url.get_backend_name() == "sqlite":
-            engine_options["connect_args"] = {"check_same_thread": False}
-            if url.database in (None, "", ":memory:"):
-                engine_options["poolclass"] = StaticPool
-            elif url.database:
-                Path(url.database).expanduser().resolve().parent.mkdir(
-                    parents=True, exist_ok=True
-                )
-        engine = create_engine(database_url, **engine_options)
+    def from_url(
+        cls, database_url: str, *, create_schema: bool | None = None
+    ) -> ProjectService:
+        engine = create_database_engine(database_url)
+        if create_schema is None:
+            create_schema = is_sqlite_url(database_url)
         if create_schema:
             Base.metadata.create_all(engine)
-        return cls(sessionmaker(engine, expire_on_commit=False))
+        return cls(create_session_factory(engine), engine)
 
     def create_project(self, name: str, html: str = "") -> dict[str, Any]:
         clean_name = _project_name(name)
@@ -171,13 +119,29 @@ class ProjectService:
             self._append_revision(session, page, clean_html, "create")
             return self._project_snapshot(session, project)
 
-    def list_projects(self, *, include_archived: bool = False) -> list[dict[str, Any]]:
+    def list_projects(
+        self, *, include_archived: bool = False, search: str = ""
+    ) -> list[dict[str, Any]]:
         with self._sessions() as session:
-            query = select(ProjectRecord).order_by(ProjectRecord.updated_at.desc())
+            page_count = (
+                select(func.count(PageRecord.id))
+                .where(PageRecord.project_id == ProjectRecord.id)
+                .correlate(ProjectRecord)
+                .scalar_subquery()
+            )
+            query = select(ProjectRecord, page_count).order_by(
+                ProjectRecord.updated_at.desc()
+            )
             if not include_archived:
                 query = query.where(ProjectRecord.archived_at.is_(None))
+            clean_search = search.strip().lower()
+            if clean_search:
+                query = query.where(
+                    func.lower(ProjectRecord.name).contains(clean_search)
+                )
             return [
-                self._project_summary(session, item) for item in session.scalars(query)
+                self._project_summary(project, count)
+                for project, count in session.execute(query)
             ]
 
     def get_project(self, project_id: str) -> dict[str, Any]:
@@ -193,16 +157,55 @@ class ProjectService:
             project = session.get(ProjectRecord, project_id)
             if project is None:
                 raise ProjectNotFoundError("Project not found")
+            if project.name == clean_name:
+                return self._project_snapshot(session, project)
             project.name = clean_name
-            project.updated_at = _utcnow()
+            project.updated_at = utcnow()
             return self._project_snapshot(session, project)
+
+    def duplicate_project(
+        self, project_id: str, *, name: str | None = None
+    ) -> dict[str, Any]:
+        with self._sessions.begin() as session:
+            source = session.get(ProjectRecord, project_id)
+            if source is None:
+                raise ProjectNotFoundError("Project not found")
+            duplicate_name = (
+                _project_name(name) if name is not None else _copy_name(source.name)
+            )
+            duplicate = ProjectRecord(name=duplicate_name)
+            session.add(duplicate)
+            session.flush()
+
+            pages = list(
+                session.scalars(
+                    select(PageRecord)
+                    .where(PageRecord.project_id == source.id)
+                    .order_by(PageRecord.created_at)
+                )
+            )
+            for source_page in pages:
+                page = PageRecord(
+                    project_id=duplicate.id,
+                    name=source_page.name,
+                    slug=source_page.slug,
+                )
+                session.add(page)
+                session.flush()
+                revision = self._current_revision(session, source_page)
+                self._append_revision(
+                    session, page, revision.html if revision else "", "duplicate"
+                )
+            return self._project_snapshot(session, duplicate)
 
     def archive_project(self, project_id: str) -> dict[str, Any]:
         with self._sessions.begin() as session:
             project = session.get(ProjectRecord, project_id)
             if project is None:
                 raise ProjectNotFoundError("Project not found")
-            project.archived_at = _utcnow()
+            if project.archived_at is not None:
+                return self._project_snapshot(session, project)
+            project.archived_at = utcnow()
             project.updated_at = project.archived_at
             return self._project_snapshot(session, project)
 
@@ -211,7 +214,7 @@ class ProjectService:
             page = session.get(PageRecord, page_id)
             if page is None:
                 raise ProjectNotFoundError("Page not found")
-            return self._page_snapshot(session, page, include_html=True)
+            return self._page_snapshot(session, page)
 
     def save_page(
         self,
@@ -224,21 +227,17 @@ class ProjectService:
         clean_html = _document(html)
         clean_source = source if source in _REVISION_SOURCES else "manual"
         with self._sessions.begin() as session:
-            page = session.scalar(
-                select(PageRecord).where(PageRecord.id == page_id).with_for_update()
-            )
+            page = session.get(PageRecord, page_id)
             if page is None:
                 raise ProjectNotFoundError("Page not found")
             if page.version != expected_version:
                 raise VersionConflictError(page.version)
             current = self._current_revision(session, page)
             if current is not None and current.html == clean_html:
-                return self._page_snapshot(session, page, include_html=True)
+                return self._page_snapshot(session, page)
             self._append_revision(session, page, clean_html, clean_source)
-            project = session.get(ProjectRecord, page.project_id)
-            if project is not None:
-                project.updated_at = page.updated_at
-            return self._page_snapshot(session, page, include_html=True)
+            self._touch_project(session, page)
+            return self._page_snapshot(session, page)
 
     def list_revisions(self, page_id: str) -> list[dict[str, Any]]:
         with self._sessions() as session:
@@ -255,9 +254,7 @@ class ProjectService:
         self, page_id: str, revision_id: str, *, expected_version: int
     ) -> dict[str, Any]:
         with self._sessions.begin() as session:
-            page = session.scalar(
-                select(PageRecord).where(PageRecord.id == page_id).with_for_update()
-            )
+            page = session.get(PageRecord, page_id)
             if page is None:
                 raise ProjectNotFoundError("Page not found")
             if page.version != expected_version:
@@ -266,24 +263,51 @@ class ProjectService:
             if revision is None or revision.page_id != page.id:
                 raise ProjectNotFoundError("Revision not found")
             self._append_revision(session, page, revision.html, "restore")
-            return self._page_snapshot(session, page, include_html=True)
+            self._touch_project(session, page)
+            return self._page_snapshot(session, page)
+
+    @staticmethod
+    def _touch_project(session: Session, page: PageRecord) -> None:
+        project = session.get(ProjectRecord, page.project_id)
+        if project is not None:
+            project.updated_at = page.updated_at
 
     @staticmethod
     def _append_revision(
         session: Session, page: PageRecord, html: str, source: str
     ) -> RevisionRecord:
+        expected_version = page.version
+        next_version = expected_version + 1
+        revision_id = new_id()
+        created_at = utcnow()
         revision = RevisionRecord(
+            id=revision_id,
             page_id=page.id,
-            sequence=page.version + 1,
+            sequence=next_version,
             html=html,
             source=source,
             parent_revision_id=page.current_revision_id,
+            created_at=created_at,
         )
+        result = session.execute(
+            update(PageRecord)
+            .where(PageRecord.id == page.id, PageRecord.version == expected_version)
+            .values(
+                version=next_version,
+                current_revision_id=revision_id,
+                updated_at=created_at,
+            )
+            .execution_options(synchronize_session=False)
+        )
+        if result.rowcount != 1:
+            current_version = session.scalar(
+                select(PageRecord.version).where(PageRecord.id == page.id)
+            )
+            raise VersionConflictError(current_version or expected_version)
         session.add(revision)
-        session.flush()
-        page.version = revision.sequence
-        page.current_revision_id = revision.id
-        page.updated_at = _utcnow()
+        page.version = next_version
+        page.current_revision_id = revision_id
+        page.updated_at = created_at
         return revision
 
     @staticmethod
@@ -294,24 +318,16 @@ class ProjectService:
             else None
         )
 
-    def _project_summary(
-        self, session: Session, project: ProjectRecord
-    ) -> dict[str, Any]:
-        page_count = len(
-            list(
-                session.scalars(
-                    select(PageRecord.id).where(PageRecord.project_id == project.id)
-                )
-            )
-        )
+    @staticmethod
+    def _project_summary(project: ProjectRecord, page_count: int) -> dict[str, Any]:
         return {
             "id": project.id,
             "name": project.name,
             "page_count": page_count,
-            "created_at": project.created_at.isoformat(),
-            "updated_at": project.updated_at.isoformat(),
+            "created_at": isoformat_utc(project.created_at),
+            "updated_at": isoformat_utc(project.updated_at),
             "archived_at": (
-                project.archived_at.isoformat() if project.archived_at else None
+                isoformat_utc(project.archived_at) if project.archived_at else None
             ),
         }
 
@@ -326,15 +342,11 @@ class ProjectService:
             )
         )
         return {
-            **self._project_summary(session, project),
-            "pages": [
-                self._page_snapshot(session, page, include_html=True) for page in pages
-            ],
+            **self._project_summary(project, len(pages)),
+            "pages": [self._page_snapshot(session, page) for page in pages],
         }
 
-    def _page_snapshot(
-        self, session: Session, page: PageRecord, *, include_html: bool
-    ) -> dict[str, Any]:
+    def _page_snapshot(self, session: Session, page: PageRecord) -> dict[str, Any]:
         revision = self._current_revision(session, page)
         result: dict[str, Any] = {
             "id": page.id,
@@ -343,11 +355,10 @@ class ProjectService:
             "slug": page.slug,
             "version": page.version,
             "current_revision_id": page.current_revision_id,
-            "created_at": page.created_at.isoformat(),
-            "updated_at": page.updated_at.isoformat(),
+            "created_at": isoformat_utc(page.created_at),
+            "updated_at": isoformat_utc(page.updated_at),
         }
-        if include_html:
-            result["html"] = revision.html if revision else ""
+        result["html"] = revision.html if revision else ""
         return result
 
     @staticmethod
@@ -358,5 +369,5 @@ class ProjectService:
             "sequence": revision.sequence,
             "source": revision.source,
             "parent_revision_id": revision.parent_revision_id,
-            "created_at": revision.created_at.isoformat(),
+            "created_at": isoformat_utc(revision.created_at),
         }
