@@ -49,6 +49,7 @@ interface State {
   runRegenerate: (instructions: string) => Promise<void>;
   refreshTemplates: () => Promise<void>;
   doSaveTemplate: () => Promise<void>;
+  doLoadTemplate: (name: string) => Promise<void>;
   doDeleteTemplate: (name: string) => Promise<void>;
   refreshDnas: () => Promise<void>;
   doSaveDna: () => Promise<void>;
@@ -124,7 +125,8 @@ export const useStore = create<State>((set, get) => ({
         current_code: s.code,
         layout_dna_guidance: s.layoutDnaGuidance,
       });
-      set({ code: res.html, notes: res.notes, safetyAlerts: res.safety_alerts, busy: false });
+      get().setCodeWithHistory(res.html);
+      set({ notes: res.notes, safetyAlerts: res.safety_alerts, busy: false });
     } catch (e) {
       set({ busy: false, error: String(e instanceof Error ? e.message : e) });
     }
@@ -147,7 +149,8 @@ export const useStore = create<State>((set, get) => ({
           density: s.constraintDensity,
         },
       });
-      set({ code: res.html, notes: res.notes, safetyAlerts: res.safety_alerts, busy: false });
+      get().setCodeWithHistory(res.html);
+      set({ notes: res.notes, safetyAlerts: res.safety_alerts, busy: false });
     } catch (e) {
       set({ busy: false, error: String(e instanceof Error ? e.message : e) });
     }
@@ -183,7 +186,8 @@ export const useStore = create<State>((set, get) => ({
         layout_dna_guidance: s.layoutDnaGuidance,
         refine_aspect: s.refineAspect,
       });
-      set({ code: res.html, notes: res.notes, safetyAlerts: res.safety_alerts, busy: false });
+      get().setCodeWithHistory(res.html);
+      set({ notes: res.notes, safetyAlerts: res.safety_alerts, busy: false });
     } catch (e) {
       set({ busy: false, error: String(e instanceof Error ? e.message : e) });
     }
@@ -204,6 +208,22 @@ export const useStore = create<State>((set, get) => ({
       await api.saveTemplate(s.templateName.trim(), s.code);
       set({ templateName: "" });
       await get().refreshTemplates();
+    } catch (e) {
+      set({ error: String(e instanceof Error ? e.message : e) });
+    }
+  },
+
+  doLoadTemplate: async (name) => {
+    try {
+      const html = await api.loadTemplate(name);
+      get().setCodeWithHistory(html);
+      set({
+        chatMessages: [],
+        threadId: crypto.randomUUID(),
+        notes: [],
+        safetyAlerts: [],
+        error: null,
+      });
     } catch (e) {
       set({ error: String(e instanceof Error ? e.message : e) });
     }
@@ -257,9 +277,9 @@ export const useStore = create<State>((set, get) => ({
         layout_dna_guidance: s.layoutDnaGuidance,
       });
       const assistantMsg: api.ChatMessage = { role: "assistant", content: res.message };
+      if (res.html) get().setCodeWithHistory(res.html);
       set({
         chatMessages: [...get().chatMessages, assistantMsg],
-        code: res.html ?? get().code,
         busy: false,
         notes: res.validation_notes,
         safetyAlerts: res.validation_errors,
@@ -291,7 +311,7 @@ export const useStore = create<State>((set, get) => ({
     const newRedo = redoStack.slice(1);
     set({
       redoStack: newRedo,
-      undoStack: code ? [...get().undoStack, code] : get().undoStack,
+      undoStack: code ? [...get().undoStack.slice(-49), code] : get().undoStack,
       code: next,
     });
   },

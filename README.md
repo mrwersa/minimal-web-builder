@@ -26,10 +26,10 @@ A sleek, minimalist web application builder powered by AI (Gemini / OpenRouter).
 - Safety rails: empty inline scripts are stripped and generated JS is audited for complexity and unsafe calls
 - Visible keyboard focus-state verification in generated templates
 - Export options: single `index.html` or split `index.html` + `styles.css` + `app.js`
-- Template memory: save the current page as a local template and reuse it to seed new generations
+- Template memory: save the current page locally and open it later as a reversible new starting point
 - Structured API logging with an opt-in local analytics file
 - Instant preview and code view
-- WYSIWYG editing: click any element in the preview to edit its text and style it inline, then Apply to sync changes back into the page
+- WYSIWYG editing: select and edit elements on the visual canvas with debounced synchronization and undo/redo
 - Input lock while generation is running
 - Self-contained output (no external frontend dependencies)
 
@@ -66,11 +66,11 @@ For a single-process production build, run `cd web && npm run build` then
 5. Preview your website in the main area (full height up to the chat input)
 6. Use the "View Code" tab to see the HTML/CSS/JS
 7. In the Code tab, pick an export format: **Single HTML** downloads one self-contained `index.html`, or **Split** downloads `index.html`, `styles.css`, and `app.js` (inline styles and scripts are extracted into the separate files)
-8. In the Code tab you can also **save the current page as a template**, then later start a new conversation from any saved template
+8. In the sidebar you can **save the current page as a template**, then use the folder button beside a saved template to open it as a fresh conversation
 
 To refine a single section after generation, open the sidebar, pick a section from the "Regenerate section" dropdown, choose a **Refine focus** (General, Spacing, Typography, Layout, or Color), and press **Regenerate section**. The selected block is regenerated in place while the rest of the page stays untouched.
 
-To edit the generated page directly, turn on **WYSIWYG editing** in the sidebar (Refine section). Click any element in the preview to select it, type to edit its text, and use the floating toolbar to bold/italicize text, change its color, resize it, or delete it. Press **Apply** to sync the edits into the page (the Preview, Code, and export all update). Editing is paused while a generation is running.
+To edit the generated page directly, turn on **WYSIWYG editing** in the sidebar (Refine section). Select elements and edit them on the visual canvas. Changes sync back after a short debounce, preserving page metadata, styles, attributes, and scripts; Preview, Code, export, and undo/redo all use the updated document. Editing pauses while generation is running.
 
 ## How It Works
 
@@ -96,7 +96,7 @@ To edit the generated page directly, turn on **WYSIWYG editing** in the sidebar 
 ## Requirements
 
 - Python 3.12+
-- Node.js 18+
+- Node.js 24+
 - See `requirements.txt` and `web/package.json`
 
 ## Repository Protection
@@ -124,13 +124,14 @@ See:
 
 The detailed roadmap is in [ROADMAP.md](ROADMAP.md).
 
-Highlights:
+Current priorities:
 
-- Phase 1: Refactor into modules, add tests, stabilize generation lifecycle ✅ complete
-- Phase 2: UX/design system and generation controls while staying minimal ✅ complete
-- Phase 3: Export modes, profiles, and product-grade reliability ✅ complete
-- Phase 4: Advanced minimal-builder ideas — constraint-first generation, refine mode, safety rails, and layout DNA ✅ complete
-- Phase 5: WYSIWYG editing (in-app direct manipulation of the generated page) 🔄 in progress
+- Phase 0: product truth, reversible document changes, editor reliability, and full-stack CI
+- Phase 1: persistent projects, users, autosave, and durable revisions
+- Phase 2: a structured document model and trustworthy responsive visual editor
+- Phase 3: cancellable, measurable, patch-based AI generation
+- Phase 4: multi-page publishing, assets, forms, domains, and rollback
+- Phase 5: collaboration and scale after the core single-user workflow has traction
 
 ## Contributing
 
