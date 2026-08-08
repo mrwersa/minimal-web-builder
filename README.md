@@ -96,7 +96,7 @@ To edit the generated page directly, turn on **WYSIWYG editing** in the sidebar 
 ## Requirements
 
 - Python 3.12+
-- Node.js 18+
+- Node.js 24+
 - See `requirements.txt` and `web/package.json`
 
 ## Repository Protection
