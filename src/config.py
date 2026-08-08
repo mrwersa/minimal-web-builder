@@ -23,6 +23,7 @@ class AppConfig:
     openrouter_api_key: str | None = None
     openrouter_model: str = DEFAULT_OPENROUTER_MODEL
     openrouter_base_url: str = DEFAULT_OPENROUTER_BASE_URL
+    database_url: str = "sqlite:///./data/minimal-web-builder.db"
 
 
 def _float_env(name: str, default: float) -> float:
@@ -66,5 +67,8 @@ def load_config(dotenv_path: str | os.PathLike | None = None) -> AppConfig:
         openrouter_model=_str_env("OPENROUTER_MODEL", DEFAULT_OPENROUTER_MODEL),
         openrouter_base_url=_str_env(
             "OPENROUTER_BASE_URL", DEFAULT_OPENROUTER_BASE_URL
+        ),
+        database_url=_str_env(
+            "DATABASE_URL", "sqlite:///./data/minimal-web-builder.db"
         ),
     )

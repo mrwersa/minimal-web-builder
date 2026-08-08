@@ -4,12 +4,13 @@ import pytest
 from fastapi.testclient import TestClient
 
 from server.main import app
+from server.projects import ProjectService
 from server.runtime import GenerationClient
 from src.config import AppConfig
 
 
 @pytest.fixture()
-def client(monkeypatch: pytest.MonkeyPatch) -> TestClient:
+def client(monkeypatch: pytest.MonkeyPatch, tmp_path):
     # Avoid real provider/gemini setup; supply a minimal client with a real config.
     cfg = AppConfig(
         api_key="",
@@ -22,12 +23,20 @@ def client(monkeypatch: pytest.MonkeyPatch) -> TestClient:
         openrouter_api_key="k",
         openrouter_model="google/gemini-2.5-flash",
         openrouter_base_url="https://openrouter.ai/api/v1",
+        database_url=f"sqlite:///{tmp_path / 'projects.db'}",
     )
-    app.state.client = GenerationClient(
+    generation_client = GenerationClient(
         config=cfg, model="google/gemini-2.5-flash", genai=None
     )
+    app.state.client = generation_client
     app.state.profiles = []
-    return TestClient(app)
+    app.state.projects = ProjectService.from_url(cfg.database_url)
+    test_client = TestClient(app)
+    try:
+        yield test_client
+    finally:
+        test_client.close()
+        app.state.projects.close()
 
 
 def test_health(client: TestClient) -> None:
@@ -181,3 +190,42 @@ def test_template_load_missing_returns_404(
     monkeypatch.setattr(m, "TEMPLATES_DIR", tmp_path)
     r = client.get("/api/templates/missing")
     assert r.status_code == 404
+
+
+def test_project_revision_api_round_trip(client: TestClient) -> None:
+    created_response = client.post(
+        "/api/projects", json={"name": "Product", "html": "<main>v1</main>"}
+    )
+    assert created_response.status_code == 201
+    created = created_response.json()
+    page = created["pages"][0]
+
+    assert client.get("/api/projects").json()["projects"][0]["id"] == created["id"]
+    saved_response = client.put(
+        f"/api/pages/{page['id']}/document",
+        json={
+            "html": "<main>v2</main>",
+            "expected_version": 1,
+            "source": "autosave",
+        },
+    )
+    assert saved_response.status_code == 200
+    assert saved_response.json()["version"] == 2
+
+    conflict = client.put(
+        f"/api/pages/{page['id']}/document",
+        json={"html": "stale", "expected_version": 1},
+    )
+    assert conflict.status_code == 409
+    assert conflict.json()["detail"]["current_version"] == 2
+
+    revisions = client.get(f"/api/pages/{page['id']}/revisions").json()["revisions"]
+    assert [revision["sequence"] for revision in revisions] == [2, 1]
+
+    restored = client.post(
+        f"/api/pages/{page['id']}/revisions/{revisions[1]['id']}/restore",
+        json={"expected_version": 2},
+    )
+    assert restored.status_code == 200
+    assert restored.json()["html"] == "<main>v1</main>"
+    assert restored.json()["version"] == 3

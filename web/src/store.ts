@@ -35,6 +35,15 @@ interface State {
 
   dnas: api.DnaItem[];
 
+  projects: api.ProjectSummary[];
+  projectName: string;
+  activeProjectId: string | null;
+  activePageId: string | null;
+  activePageVersion: number;
+  revisions: api.RevisionSummary[];
+  saveState: "idle" | "saving" | "saved" | "conflict";
+  saveQueued: boolean;
+
   chatMessages: api.ChatMessage[];
   threadId: string;
 
@@ -53,11 +62,28 @@ interface State {
   doDeleteTemplate: (name: string) => Promise<void>;
   refreshDnas: () => Promise<void>;
   doSaveDna: () => Promise<void>;
+  refreshProjects: () => Promise<void>;
+  createCurrentProject: () => Promise<void>;
+  openProject: (projectId: string) => Promise<void>;
+  saveActivePage: () => Promise<void>;
+  refreshRevisions: () => Promise<void>;
+  restoreRevision: (revisionId: string) => Promise<void>;
   runChat: (message: string) => Promise<void>;
   clearChat: () => void;
   undo: () => void;
   redo: () => void;
   setCodeWithHistory: (code: string) => void;
+}
+
+let autosaveTimer: ReturnType<typeof setTimeout> | null = null;
+
+function scheduleAutosave(get: () => State, delay = 800) {
+  if (!get().activePageId) return;
+  if (autosaveTimer) clearTimeout(autosaveTimer);
+  autosaveTimer = setTimeout(() => {
+    autosaveTimer = null;
+    void get().saveActivePage();
+  }, delay);
 }
 
 export const useStore = create<State>((set, get) => ({
@@ -93,6 +119,15 @@ export const useStore = create<State>((set, get) => ({
   templateName: "",
 
   dnas: [],
+
+  projects: [],
+  projectName: "",
+  activeProjectId: null,
+  activePageId: null,
+  activePageVersion: 0,
+  revisions: [],
+  saveState: "idle",
+  saveQueued: false,
 
   chatMessages: [],
   threadId: crypto.randomUUID(),
@@ -257,6 +292,153 @@ export const useStore = create<State>((set, get) => ({
     }
   },
 
+  refreshProjects: async () => {
+    try {
+      set({ projects: await api.fetchProjects() });
+    } catch (e) {
+      set({ error: String(e instanceof Error ? e.message : e) });
+    }
+  },
+
+  createCurrentProject: async () => {
+    const s = get();
+    const name = s.projectName.trim();
+    if (!name) return;
+    try {
+      const project = await api.createProject(name, s.code ?? "");
+      const page = project.pages[0];
+      set({
+        projectName: "",
+        activeProjectId: project.id,
+        activePageId: page.id,
+        activePageVersion: page.version,
+        saveState: "saved",
+        revisions: [],
+        error: null,
+      });
+      await get().refreshProjects();
+      await get().refreshRevisions();
+    } catch (e) {
+      set({ error: String(e instanceof Error ? e.message : e) });
+    }
+  },
+
+  openProject: async (projectId) => {
+    const current = get();
+    if (current.activePageId && current.saveState === "saving") {
+      set({ error: "Wait for the current save to finish before switching projects" });
+      return;
+    }
+    if (current.activePageId && current.saveState === "idle") {
+      await get().saveActivePage();
+      if (get().saveState !== "saved") return;
+    }
+    try {
+      const project = await api.fetchProject(projectId);
+      const page = project.pages[0];
+      if (!page) throw new Error("Project has no pages");
+      if (autosaveTimer) clearTimeout(autosaveTimer);
+      autosaveTimer = null;
+      set({
+        activeProjectId: project.id,
+        activePageId: page.id,
+        activePageVersion: page.version,
+        code: page.html,
+        undoStack: [],
+        redoStack: [],
+        chatMessages: [],
+        threadId: crypto.randomUUID(),
+        notes: [],
+        safetyAlerts: [],
+        saveState: "saved",
+        saveQueued: false,
+        error: null,
+      });
+      await get().refreshRevisions();
+    } catch (e) {
+      set({ error: String(e instanceof Error ? e.message : e) });
+    }
+  },
+
+  saveActivePage: async () => {
+    const s = get();
+    if (!s.activePageId || s.code === null) return;
+    if (s.saveState === "saving") {
+      set({ saveQueued: true });
+      return;
+    }
+    const pageId = s.activePageId;
+    const html = s.code;
+    const expectedVersion = s.activePageVersion;
+    set({ saveState: "saving", saveQueued: false });
+    try {
+      const page = await api.savePage(pageId, html, expectedVersion);
+      if (get().activePageId !== pageId) return;
+      const saveAgain = get().saveQueued || get().code !== html;
+      set({
+        activePageVersion: page.version,
+        saveState: "saved",
+        saveQueued: false,
+        error: null,
+      });
+      await get().refreshProjects();
+      await get().refreshRevisions();
+      if (saveAgain) scheduleAutosave(get, 0);
+    } catch (e) {
+      if (get().activePageId !== pageId) return;
+      if (e instanceof api.PageVersionConflictError) {
+        set({ saveState: "conflict", saveQueued: false, error: e.message });
+      } else {
+        set({
+          saveState: "idle",
+          saveQueued: false,
+          error: String(e instanceof Error ? e.message : e),
+        });
+      }
+    }
+  },
+
+  refreshRevisions: async () => {
+    const pageId = get().activePageId;
+    if (!pageId) {
+      set({ revisions: [] });
+      return;
+    }
+    try {
+      set({ revisions: await api.fetchRevisions(pageId) });
+    } catch (e) {
+      set({ error: String(e instanceof Error ? e.message : e) });
+    }
+  },
+
+  restoreRevision: async (revisionId) => {
+    const s = get();
+    if (!s.activePageId) return;
+    try {
+      const page = await api.restoreRevision(
+        s.activePageId,
+        revisionId,
+        s.activePageVersion,
+      );
+      const previous = get().code;
+      set({
+        code: page.html,
+        activePageVersion: page.version,
+        undoStack: previous ? [...get().undoStack.slice(-49), previous] : get().undoStack,
+        redoStack: [],
+        saveState: "saved",
+        error: null,
+      });
+      await get().refreshRevisions();
+    } catch (e) {
+      if (e instanceof api.PageVersionConflictError) {
+        set({ saveState: "conflict", error: e.message });
+      } else {
+        set({ error: String(e instanceof Error ? e.message : e) });
+      }
+    }
+  },
+
   runChat: async (message) => {
     const s = get();
     const userMsg: api.ChatMessage = { role: "user", content: message };
@@ -293,7 +475,7 @@ export const useStore = create<State>((set, get) => ({
   clearChat: () => set({ chatMessages: [], threadId: crypto.randomUUID() }),
 
   undo: () => {
-    const { undoStack, code } = get();
+    const { undoStack, code, activePageId, saveState } = get();
     if (undoStack.length === 0) return;
     const prev = undoStack[undoStack.length - 1];
     const newUndo = undoStack.slice(0, -1);
@@ -301,11 +483,13 @@ export const useStore = create<State>((set, get) => ({
       undoStack: newUndo,
       redoStack: code ? [code, ...get().redoStack] : get().redoStack,
       code: prev,
+      saveState: activePageId && saveState !== "conflict" ? "idle" : saveState,
     });
+    scheduleAutosave(get);
   },
 
   redo: () => {
-    const { redoStack, code } = get();
+    const { redoStack, code, activePageId, saveState } = get();
     if (redoStack.length === 0) return;
     const next = redoStack[0];
     const newRedo = redoStack.slice(1);
@@ -313,19 +497,26 @@ export const useStore = create<State>((set, get) => ({
       redoStack: newRedo,
       undoStack: code ? [...get().undoStack.slice(-49), code] : get().undoStack,
       code: next,
+      saveState: activePageId && saveState !== "conflict" ? "idle" : saveState,
     });
+    scheduleAutosave(get);
   },
 
   setCodeWithHistory: (newCode) => {
-    const { code } = get();
-    if (code && code !== newCode) {
+    const { code, activePageId, saveState } = get();
+    if (code === newCode) return;
+    const nextSaveState =
+      activePageId && saveState !== "conflict" ? "idle" : saveState;
+    if (code) {
       set({
         undoStack: [...get().undoStack.slice(-49), code],
         redoStack: [],
         code: newCode,
+        saveState: nextSaveState,
       });
     } else {
-      set({ code: newCode });
+      set({ code: newCode, saveState: nextSaveState });
     }
+    scheduleAutosave(get);
   },
 }));

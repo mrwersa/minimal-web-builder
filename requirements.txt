@@ -10,3 +10,6 @@ langchain-core>=1.0.0
 # Gemini provider (optional — OpenRouter is configured by default)
 google-generativeai>=0.3.2
 python-dotenv
+# Durable project/revision persistence (SQLite locally, PostgreSQL in production)
+sqlalchemy>=2.0
+psycopg[binary]>=3.2

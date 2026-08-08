@@ -32,6 +32,8 @@ A sleek, minimalist web application builder powered by AI (Gemini / OpenRouter).
 - WYSIWYG editing: select and edit elements on the visual canvas with debounced synchronization and undo/redo
 - Input lock while generation is running
 - Self-contained output (no external frontend dependencies)
+- Durable projects with automatic SQLite development storage or PostgreSQL via `DATABASE_URL`
+- Immutable page revisions, debounced autosave, optimistic conflict detection, and restore
 
 
 ## Setup
@@ -42,6 +44,8 @@ A sleek, minimalist web application builder powered by AI (Gemini / OpenRouter).
    cd web && npm install
    ```
 2. Create a `.env` with an API key (see below).
+   The default `DATABASE_URL` uses `./data/minimal-web-builder.db`; set a
+   `postgresql+psycopg://...` URL for a production PostgreSQL database.
 3. Run both processes:
    ```bash
    # terminal 1: API
@@ -67,6 +71,7 @@ For a single-process production build, run `cd web && npm run build` then
 6. Use the "View Code" tab to see the HTML/CSS/JS
 7. In the Code tab, pick an export format: **Single HTML** downloads one self-contained `index.html`, or **Split** downloads `index.html`, `styles.css`, and `app.js` (inline styles and scripts are extracted into the separate files)
 8. In the sidebar you can **save the current page as a template**, then use the folder button beside a saved template to open it as a fresh conversation
+9. In **Projects**, name and create a durable project from the current page. Later edits autosave as immutable revisions; open Version history to restore an earlier result.
 
 To refine a single section after generation, open the sidebar, pick a section from the "Regenerate section" dropdown, choose a **Refine focus** (General, Spacing, Typography, Layout, or Color), and press **Regenerate section**. The selected block is regenerated in place while the rest of the page stays untouched.
 
@@ -80,6 +85,7 @@ To edit the generated page directly, turn on **WYSIWYG editing** in the sidebar 
 4. Turn on WYSIWYG editing to click and edit elements directly.
 5. Describe refinements in the chat bar — the agent applies them to the current page.
 6. Export your page as a single HTML file or split into HTML/CSS/JS.
+7. When a project is active, document changes autosave with an expected version so stale browser sessions cannot silently overwrite newer work.
 
 ## Technologies
 
