@@ -103,6 +103,16 @@ export async function saveTemplate(name: string, html: string): Promise<void> {
   }
 }
 
+export async function loadTemplate(name: string): Promise<string> {
+  const r = await fetch(`/api/templates/${encodeURIComponent(name)}`);
+  if (!r.ok) {
+    const d = await r.json().catch(() => ({}));
+    throw new Error(d.detail ?? `templates ${r.status}`);
+  }
+  const result = await r.json();
+  return result.html;
+}
+
 export async function deleteTemplate(name: string): Promise<void> {
   const r = await fetch(`/api/templates/${encodeURIComponent(name)}`, { method: "DELETE" });
   if (!r.ok) throw new Error(`templates ${r.status}`);

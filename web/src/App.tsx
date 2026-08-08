@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Toaster, toast } from "sonner";
 import { Eye, Code2, AlertCircle, Info, Sparkles, ArrowRight, Undo2, Redo2 } from "lucide-react";
 import Preview from "./components/Preview";
@@ -31,11 +31,18 @@ export default function App() {
   const [tab, setTab] = useState<Tab>("preview");
   const [prompt, setPrompt] = useState("");
   const [showChat, setShowChat] = useState(true);
+  const wasBusy = useRef(false);
 
   useEffect(() => { loadOptions(); }, [loadOptions]);
   useEffect(() => { if (safetyAlerts.length) toast.warning("Safety: " + safetyAlerts.join(", ")); }, [safetyAlerts]); // eslint-disable-line
   useEffect(() => { if (error) toast.error(error); }, [error]); // eslint-disable-line
-  useEffect(() => { if (code && !busy) { toast.success("Page generated"); setTab("preview"); } }, [code, busy]); // eslint-disable-line
+  useEffect(() => {
+    if (wasBusy.current && !busy && code && !error) {
+      toast.success("Page updated");
+      setTab("preview");
+    }
+    wasBusy.current = busy;
+  }, [code, busy, error]);
 
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {

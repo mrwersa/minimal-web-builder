@@ -47,6 +47,7 @@ from src.sections import extract_sections, replace_section
 from src.templates import (
     delete_template,
     list_templates,
+    load_template,
     save_template,
 )
 from src.theme import (
@@ -101,7 +102,7 @@ def _sanitize_output(raw: str) -> tuple[str, list[str], list[str]]:
 
 
 class GenerateRequest(BaseModel):
-    prompt: str
+    prompt: str | None = None
     tone: str = "minimal"
     complexity: str = "balanced"
     strict_minimal: bool = False
@@ -212,7 +213,7 @@ def generate_page(req: GenerateRequest) -> JSONResponse:
         )
     else:
         validated, err = validate_user_prompt(
-            req.prompt, max_prompt_chars=cfg.max_prompt_chars
+            req.prompt or "", max_prompt_chars=cfg.max_prompt_chars
         )
         if err:
             raise HTTPException(status_code=400, detail=err)
@@ -418,6 +419,17 @@ def templates_save(req: TemplateSaveRequest) -> dict[str, Any]:
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
     return {"saved": saved.stem}
+
+
+@app.get("/api/templates/{name}")
+def templates_load(name: str) -> dict[str, str]:
+    try:
+        html = load_template(TEMPLATES_DIR, name)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    except FileNotFoundError:
+        raise HTTPException(status_code=404, detail="Template not found")
+    return {"name": name, "html": html}
 
 
 @app.delete("/api/templates/{name}")

@@ -1,191 +1,156 @@
 # Product Roadmap
 
-This roadmap keeps the project a minimal web builder while raising quality, reliability, and extensibility.
+Legend: ✅ done · 🔄 in progress · ⬜ planned
 
-Legend: ✅ done · 🔄 in progress · ⬜ not started
+## Product focus
 
-## North Star
+Build the fastest, safest AI-assisted builder for polished, responsive marketing
+websites. The product should combine natural-language generation with precise direct
+editing, durable revision history, and a trustworthy path from idea to published site.
 
-Build the most reliable minimal web builder for self-contained, beautiful, responsive pages generated from natural language.
+The product is intentionally not a general-purpose application IDE. Self-contained,
+portable HTML remains an important output, but the editable source of truth will move
+from one mutable HTML string to a structured page document with stable element IDs.
 
-## Current State (v1)
+## Architecture direction
 
-- Modular architecture: `server/` holds the FastAPI API + LangGraph agent; `src/` holds config, generation, validation, safety, theme, and a11y.
-- Gemini prompt-to-HTML generation with sandboxed in-app preview.
-- Session state lifecycle, input validation, output safety policy, and deterministic tests.
-- Generation controls (tone presets, strict minimal mode, complexity slider) shipped as Phase 2 groundwork.
-- Section-level regeneration: pick any top-level section and regenerate just that block in place.
-- App UI styled from the shared design-token palette; accessibility guardrails in the prompt plus a static audit of generated HTML (incl. visible focus styles).
-- Export modes: single `index.html` download or split export (`index.html` + `styles.css` + `app.js`).
-- Generation profiles: `profiles/*.json` bundle tone, complexity, strict mode, and extra prompt guidance; a "Custom" option restores manual controls.
-- Template memory: save the current page to a local `templates/` dir and seed a fresh conversation from any saved template.
-- Observability: structured JSON events (latency, output size, failures) via the `minimal_web_builder` logger, with an opt-in local JSONL analytics hook (`ANALYTICS_FILE`).
-- Refine mode: regenerate a section focused on a single aspect (spacing, typography, layout, or color).
-- Constraint-first generation: build a page from required sections, a color limit, and density; the model fills in the details.
-- Layout DNA: inspect the grammar of the current page (ordered section tags + JS weight), save good layouts to a local `layout_dna/` dir, and apply a saved layout's rhythm to the next generation.
-- Safety rails: empty inline `<script>` blocks are stripped by the output policy; inline scripts are audited for complexity and unsafe calls (`eval`, `new Function`, `document.write`).
-- ~95% coverage on core non-UI modules; CI gates on lint + syntax + tests + coverage.
+- Keep a modular monolith: React client, FastAPI API, shared Python service modules.
+- Add PostgreSQL for users, projects, pages, revisions, conversations, and jobs.
+- Run provider calls, validation, screenshots, and publishing in durable workers.
+- Store assets and published artifacts in object storage behind a CDN.
+- Introduce a structured document model compiled to self-contained HTML.
+- Make AI return typed document patches instead of rewriting the entire page.
+- Keep the visual editor behind a canvas adapter; it must not become the persistence format.
+- Avoid microservices, real-time multiplayer, and plugins until the core single-user loop is excellent.
 
-## Phase 1: Foundation ✅ (complete)
+## Phase 0: Product truth and reliability 🔄
 
-Goals:
-- Stabilize runtime behavior and remove obvious implementation risks.
-- Establish baseline testing and CI confidence.
+Goal: make every documented workflow reliable before adding platform infrastructure.
 
-Work items (all complete):
-- ✅ Split monolith into modules (src/config.py, src/generation.py, src/rendering.py [removed], src/state.py [removed]).
-  - ✅ src/config.py for env and model settings.
-  - ✅ src/generation.py for Gemini adapter and prompt policies.
-  - ✅ src/rendering.py for preview/code rendering helpers.
-  - ✅ src/state.py for session state operations.
-- ✅ Add input/output validation:
-  - ✅ Guard against empty prompts.
-  - ✅ Normalize code-fence stripping.
-  - ✅ Add max prompt length and friendly errors.
-- ✅ Harden generated output handling:
-  - ✅ Keep iframe sandboxing strategy explicit.
-  - ✅ Add a strict policy for disallowed tags/scripts where needed.
-- ✅ Add tests:
-  - ✅ Unit tests for prompt assembly and code extraction.
-  - ✅ State transition tests for generation lifecycle.
-  - ✅ Regression tests for API error handling.
-- ✅ Add CI quality gates (already bootstrapped):
-  - ✅ Lint, syntax check, tests on PRs.
+- ✅ Allow constraint-only generation without a redundant prompt.
+- ✅ Load saved templates into a fresh conversation, not only save/delete them.
+- ✅ Put generation, chat, section regeneration, templates, and visual edits into one undo history.
+- ✅ Debounce visual-editor updates and preserve metadata, styles, attributes, and scripts.
+- ✅ Remove the obsolete iframe editor shim and pause visual editing during generation.
+- ✅ Lazy-load the visual editor.
+- ✅ Add frontend type-check, test, and build gates to CI.
+- ✅ Add regression tests for constraint generation, template loading, revision history,
+  and editor document round trips.
+- ✅ Replace the legacy Streamlit-era roadmap and correct the user documentation.
+- ⬜ Add browser-level smoke tests for generate → edit → undo → export.
+- ⬜ Add explicit, actionable errors for failed sidebar data loads.
 
-Exit criteria (all met):
-- ✅ No blocking lint/syntax issues.
-- ✅ >= 70% coverage on core non-UI modules (95%).
-- ✅ Stable PR checks and deterministic local runs.
+Exit metrics:
 
-## Phase 2: Usability + Design System ✅ (complete)
+- Zero known broken documented workflows.
+- All frontend and backend checks required on pull requests.
+- Visual editing does not silently remove page metadata or JavaScript.
+- Every meaningful document mutation is reversible.
 
-Goals:
-- Improve design quality without losing minimalism.
-- Increase user trust and control.
+## Phase 1: Projects and durable revisions ⬜
 
-Work items:
-- ✅ Introduce a small design token layer:
-  - ✅ Typography scale, spacing scale, neutral + accent palette.
-  - ✅ Shared UI constants for theme consistency.
-  - ✅ App CSS consumes the tokens (now via Tailwind in web/).
-- ✅ Better generation controls:
-  - ✅ Tone presets (minimal, editorial, product, portfolio, landing).
-  - ✅ Optional strict minimal mode (fewer decorations).
-  - ✅ Output complexity slider (compact / balanced / detailed).
-- ✅ Prompt iteration UX:
-  - ✅ Keep instruction history (last 8 user instructions are preserved across turns).
-  - ✅ Regenerate section-level variants (hero, cards, footer) via an in-app section picker.
-- ✅ Accessibility checks:
-  - ✅ Contrast guardrails in generation prompt (WCAG AA baseline).
-  - ✅ Keyboard navigation/structure audit of generated templates (alt, labels, h1, tabindex).
-  - ✅ Visual focus-state verification in generated templates (:focus / :focus-visible detection).
+Goal: users can safely leave and return to their work.
 
-Exit criteria:
-- ✅ Reduced failed-generation rate (validation + friendly errors + safety policy cut failure modes; formal measurement deferred to Phase 3 observability).
-- ✅ Faster time-to-usable-result for first prompt (single-prompt flow + presets reduce iterations; not yet benchmarked).
-- ✅ Documented visual system and generation presets (design tokens consumed across the app; presets documented).
+- Add `users`, `projects`, `pages`, `revisions`, `conversations`, and
+  `generation_jobs` persistence.
+- Add a project dashboard with create, rename, duplicate, archive, and search.
+- Add autosave with optimistic concurrency and conflict detection.
+- Add immutable version history, named checkpoints, restore, and duplicate-from-revision.
+- Move templates and Layout DNA into owner-scoped records.
+- Add authentication, project authorization, rate limits, and audit events.
+- Unify `/generate`, `/generate-section`, and `/chat` behind one generation orchestrator.
+- Persist conversation checkpoints instead of using process-local memory.
 
-## Phase 3: Productization ✅ (complete)
+Exit metrics:
 
-Goals:
-- Make the tool production-usable for repeated workflows.
-- Keep architecture minimal but extensible.
+- Browser refresh and server restart do not lose work.
+- Every document change is recoverable.
+- No cross-user access to projects or reusable assets.
+- Mutating API operations are idempotent where appropriate.
 
-Work items:
-- ✅ Project export modes:
-  - ✅ Single HTML export (restored; `index.html` download in the Code tab).
-  - ✅ Optional split export (index.html, styles.css, app.js) via `src/export.py`.
-- ✅ Configurable generation profiles:
-  - ✅ profiles/minimal.json (strict default).
-  - ✅ profiles/startup-landing.json, profiles/portfolio.json.
-  - ✅ Profile selector in the sidebar; individual controls disabled while a profile is active.
-- ✅ Template memory:
-  - ✅ Save successful outputs as reusable local templates (`templates/`, git-ignored).
-  - ✅ Let users seed new generations from a prior build (fresh conversation with the template as the baseline).
-- ✅ Observability:
-  - ✅ Structured logs around API latency and failures (`generation.success` / `generation.error` JSON events).
-  - ✅ Lightweight analytics hooks (local-only, opt-in via `ANALYTICS_FILE` JSONL).
+## Phase 2: A trustworthy visual editor ⬜
 
-Exit criteria:
-- ✅ Repeatable workflow for build -> revise -> export (chat build, section refine, profiles, template seed, single/split export).
-- ✅ Strong reliability for long editing sessions (instruction history, stable session state, structured error/failure logging).
+Goal: common changes are faster by direct manipulation than by prompting.
 
-## Phase 4: Advanced Minimal Builder Ideas
+- Introduce a versioned structured document schema and deterministic HTML compiler.
+- Add stable selection, breadcrumbs, layers, element tree, and property inspector.
+- Add desktop, tablet, and mobile breakpoints with viewport presets and zoom.
+- Add drag/reorder, spacing, typography, color, layout, visibility, and link controls.
+- Add global design tokens for color, type, spacing, radius, and container width.
+- Add element-scoped AI commands using stable node IDs.
+- Add accessible keyboard navigation, shortcuts, and a command palette.
+- Preserve custom CSS and JavaScript through explicit advanced escape hatches.
 
-Potential additions that preserve minimalism:
-- ✅ Constraint-first generation:
-  - ✅ Build a site from constraints only (required sections, color limit, density); the model fills in the details.
-- ✅ Layout DNA:
-  - ✅ Extract reusable layout grammar from accepted generations (ordered sections + JS weight).
-  - ✅ Save good layouts to a local `layout_dna/` dir and apply a saved layout's rhythm to future generations.
-- ✅ Refine mode:
-  - ✅ Aspect-focused section updates ("Improve only spacing / typography / layout / color") without major rewrites.
-- ✅ Safety rails:
-  - ✅ Validate generated JS complexity (statement/line heuristics) and flag unsafe calls.
-  - ✅ Forbid unnecessary scripts (empty inline `<script>` blocks stripped by the output policy).
+Exit metrics:
 
-## Phase 5: WYSIWYG editing 🔄 (in progress)
+- No document loss after repeated edit/preview/export round trips.
+- Undo/redo works across both AI and manual edits.
+- A typical direct edit takes fewer than three interactions.
+- Responsive problems can be fixed without regenerating the page.
 
-Goals:
-- Let users directly manipulate the generated page (the NaturalMash mixed-initiative model):
-  natural language produces the page, direct manipulation refines it.
-- Keep the backend (generation, safety, audit, export) unchanged.
+## Phase 3: Reliable AI generation ⬜
 
-Inspiration: Aghaee, *End-User Development of Mashups Using Live Natural Language Programming*
-(USI Lugano, 2014) — a hybrid EUD technique combining natural-language programming with a
-WYSIWYG interface and live programming.
+Goal: generation is observable, cancellable, measurable, and structurally safe.
 
-Work items:
-- ✅ Custom Streamlit component (`frontend/wysiwyg/`) hosting a sandboxed, editable preview
-  iframe with a vendored Streamlit component protocol (no build step, no CDN).
-- ✅ Editor shim injected into the preview: click-to-select, inline text editing
-  (contentEditable), bold/italic, text color, font size, delete element, and Apply.
-- ✅ Edit-sync bridge: editing returns the updated document; `consume_edit_message` applies it
-  to `last_app_code` (nonce-guarded against replay), so Preview, Code, and export stay in sync.
-- ✅ App integration: sidebar "WYSIWYG editing" toggle; editing auto-disabled while generating.
-- ✅ Tests for the WYSIWYG helpers and a headless `AppTest` smoke test of `app.py`.
-- ⬜ Element-scoped AI refinement: select an element + describe a change; regenerate just that
-  element in place (mixed-initiative NL command scoped to the selection).
-- ⬜ Live programming: debounced auto-apply as you edit (DOM&#8596;code sync) with undo/redo.
+- Replace full-document rewrites with typed insert/update/move/delete patches.
+- Stream job progress and support cancellation, retry, and recovery after navigation.
+- Add durable workers, provider timeouts, fallback policy, and concurrency limits.
+- Add visual-quality, responsiveness, accessibility, and instruction-following fixtures.
+- Add screenshot and visual-regression checks for representative pages.
+- Track latency, token usage, cost, acceptance, undo-after-generation, and failures.
+- Add structured content and asset inputs instead of relying only on prompt inference.
 
-Exit criteria (so far):
-- ✅ Users can edit the generated page in place and sync edits back without touching code.
-- ⬜ Element-scoped AI refinement ships as a follow-up increment.
+Exit metrics:
 
-## Phase 6: Re-platform to React + FastAPI 🔄 (in progress)
+- At least 95% of generations are technically valid.
+- Fewer than 2% of generation jobs fail or become orphaned.
+- Provider-specific P95 latency targets are measured and enforced.
+- At least 70% of first results are accepted or refined rather than discarded.
 
-Goal: move the UI onto a React + FastAPI stack, reusing the existing `src/*`
-module layer unchanged. The legacy Streamlit app has been removed.
+## Phase 4: Complete website workflow ⬜
 
-Inspiration: the NaturalMash mixed-initiative model (NL programming + WYSIWYG +
-live programming) needs a rich interactive canvas, which Streamlit's rerun model
-makes fragile. A React SPA gives full control of the WYSIWYG + live refresh UX.
+Goal: users can build and publish a complete professional website without leaving the product.
 
-Work items:
-- ✅ FastAPI backend (`server/`) exposing the existing logic over a clean JSON
-  API: health, options, generate, generate-section, sections, templates, layout
-  DNAs, export, preview-doc. Generation logic lives in `src/*` unchanged.
-- ✅ Frontend scaffold: Vite + TypeScript + Tailwind + Zustand (`web/`).
-- ✅ Core UI: sidebar (generation options, profiles, constraint-first, refine,
-  layout DNA, templates), preview/code tabs, chat input, generate flow,
-  section regeneration, templates, DNAs, export.
-- ✅ WYSIWYG editing ported into the React preview (sandboxed iframe + editor
-  shim via ``/api/preview-doc``).
-- ✅ Proxy in dev (Vite) and single-process static serve in production (FastAPI).
-- ✅ Backend test suite (TestClient + mocked generation), 11 cases.
-- ⬜ Live programming (debounced auto-apply + undo/redo) in the React canvas.
-- ⬜ Element-scoped AI refinement select → describe → regenerate just that element.
-- ⬜ Frontend component tests (Vitest + Testing Library).
-- ⬜ GrapeJS WYSIWYG integration (production-grade visual editor).
+- Add multi-page sites, shared navigation, shared sections, and page settings.
+- Add asset upload, optimization, alt text, and an owner-scoped media library.
+- Add SEO metadata, sitemap, robots rules, and social preview cards.
+- Add forms with spam protection, submissions, and notifications.
+- Add preview URLs, one-click publish, custom domains, SSL, rollback, and unpublish.
+- Add a pre-publish check for links, accessibility, responsive layout, SEO, and performance.
+- Add ZIP and GitHub export as secondary delivery paths.
 
-Exit criteria (so far):
-- ✅ The React app can generate, preview, edit (WYSIWYG) and export end-to-end
-  against the real provider.
-- ⬜ Parity coverage and live-programming UX before full production readiness.
+Exit metrics:
 
-## Engineering Principles
+- A project can go from prompt to a live domain entirely in-product.
+- Any published revision can be rolled back safely.
+- Published pages meet defined accessibility and performance budgets.
 
-- Minimal surface area, maximal clarity.
-- Keep dependencies low and explicit.
-- Prefer pure functions for generation/data paths.
-- Every behavior change should include tests and docs updates.
+## Phase 5: Collaboration and scale ⬜
+
+Goal: add team and operational capabilities only after the single-user workflow has traction.
+
+- Add invitations, roles, comments, presence, and approval workflows.
+- Add real-time CRDT/OT editing only when usage demonstrates demand.
+- Add queue autoscaling, backups, disaster recovery, quotas, billing, and support tooling.
+- Add an extension/plugin API only after the document schema is stable.
+
+## Product metrics
+
+The roadmap is governed by outcomes rather than feature count:
+
+- Time from first prompt to accepted page.
+- First-generation acceptance and refinement rate.
+- Undo/revert rate after AI and visual-editor changes.
+- Generation success, cancellation, and latency percentiles.
+- Autosave recovery and revision-restore success.
+- Publish completion and rollback success.
+- Accessibility, responsive-layout, and performance pass rates.
+
+## Engineering principles
+
+- One canonical document and one revision history.
+- Stable contracts between canvas, document model, compiler, and generation system.
+- Safe, reversible edits before clever automation.
+- Modular monolith before microservices.
+- Every behavior change includes proportional tests and documentation.
+- No roadmap item is complete until its user-visible workflow is verified.

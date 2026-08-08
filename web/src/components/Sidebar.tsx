@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 import {
-  Sparkles, Sliders, Wand2, Layers, Save, Trash2,
+  Sparkles, Sliders, Wand2, Layers, Save, Trash2, FolderOpen,
   MousePointerClick, ChevronDown,
 } from "lucide-react";
 import { useStore } from "../store";
@@ -197,9 +197,14 @@ export default function Sidebar() {
                   {s.templates.map((t) => (
                     <div key={t} className="flex items-center justify-between rounded-lg border border-border2 px-2.5 py-1.5 text-xs">
                       <span className="truncate text-muted">{t}</span>
-                      <button onClick={() => s.doDeleteTemplate(t)} className="shrink-0 rounded p-1 text-muted2 hover:bg-red-50 hover:text-danger">
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </button>
+                      <span className="flex shrink-0 gap-1">
+                        <button onClick={() => s.doLoadTemplate(t)} title={`Use ${t}`} className="rounded p-1 text-muted2 hover:bg-accentSoft hover:text-accent">
+                          <FolderOpen className="h-3.5 w-3.5" />
+                        </button>
+                        <button onClick={() => s.doDeleteTemplate(t)} title={`Delete ${t}`} className="rounded p-1 text-muted2 hover:bg-red-50 hover:text-danger">
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </button>
+                      </span>
                     </div>
                   ))}
                 </div>

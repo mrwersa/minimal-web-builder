@@ -88,6 +88,27 @@ def test_generate_rejects_empty_prompt(client: TestClient) -> None:
     assert "detail" in r.json()
 
 
+def test_generate_accepts_constraints_without_prompt(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(
+        "server.main.generate",
+        lambda *a, **k: "<!doctype html><html><body><h1>Constrained</h1></body></html>",
+    )
+    r = client.post(
+        "/api/generate",
+        json={
+            "constraints": {
+                "sections": ["hero", "footer"],
+                "color_limit": "single-accent",
+                "density": "balanced",
+            }
+        },
+    )
+    assert r.status_code == 200
+    assert "Constrained" in r.json()["html"]
+
+
 def test_generate_propagates_api_errors(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -144,6 +165,19 @@ def test_templates_round_trip(
     assert r.json()["saved"] == "my-page"
     r = client.get("/api/templates")
     assert r.json()["templates"] == ["my-page"]
+    r = client.get("/api/templates/my-page")
+    assert r.status_code == 200
+    assert r.json() == {"name": "my-page", "html": "<html></html>"}
     r = client.delete("/api/templates/my-page")
     assert r.status_code == 200
     assert client.get("/api/templates").json()["templates"] == []
+
+
+def test_template_load_missing_returns_404(
+    client: TestClient, tmp_path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    import server.main as m
+
+    monkeypatch.setattr(m, "TEMPLATES_DIR", tmp_path)
+    r = client.get("/api/templates/missing")
+    assert r.status_code == 404
