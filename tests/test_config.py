@@ -49,6 +49,14 @@ def test_load_config_analytics_file_defaults_none(monkeypatch) -> None:
     assert load_config(dotenv_path=_NO_DOTENV).analytics_file is None
 
 
+def test_load_config_reads_database_url(monkeypatch) -> None:
+    monkeypatch.setenv("DATABASE_URL", "postgresql+psycopg://builder:test@db/builder")
+
+    cfg = load_config(dotenv_path=_NO_DOTENV)
+
+    assert cfg.database_url == "postgresql+psycopg://builder:test@db/builder"
+
+
 def test_load_config_defaults_to_gemini_provider(monkeypatch) -> None:
     monkeypatch.delenv("GENERATION_PROVIDER", raising=False)
 

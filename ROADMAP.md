@@ -47,15 +47,19 @@ Exit metrics:
 - Visual editing does not silently remove page metadata or JavaScript.
 - Every meaningful document mutation is reversible.
 
-## Phase 1: Projects and durable revisions ⬜
+## Phase 1: Projects and durable revisions 🔄
 
 Goal: users can safely leave and return to their work.
 
-- Add `users`, `projects`, `pages`, `revisions`, `conversations`, and
-  `generation_jobs` persistence.
-- Add a project dashboard with create, rename, duplicate, archive, and search.
-- Add autosave with optimistic concurrency and conflict detection.
-- Add immutable version history, named checkpoints, restore, and duplicate-from-revision.
+- ✅ Add SQLAlchemy persistence with SQLite development and PostgreSQL production URLs.
+- ✅ Add durable `projects`, `pages`, and immutable `revisions` records.
+- ✅ Add project create/open controls backed by the API.
+- ✅ Add debounced autosave with optimistic concurrency and visible conflict detection.
+- ✅ Add revision history and restore-as-new-revision.
+- ⬜ Add `users`, `conversations`, and `generation_jobs` persistence.
+- ⬜ Add database migrations before production deployment.
+- ⬜ Expand the project browser with rename, duplicate, archive, and search.
+- ⬜ Add named checkpoints and duplicate-from-revision.
 - Move templates and Layout DNA into owner-scoped records.
 - Add authentication, project authorization, rate limits, and audit events.
 - Unify `/generate`, `/generate-section`, and `/chat` behind one generation orchestrator.

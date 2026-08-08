@@ -22,6 +22,46 @@ export interface SectionInfo {
   snippet: string;
 }
 
+export interface ProjectSummary {
+  id: string;
+  name: string;
+  page_count: number;
+  created_at: string;
+  updated_at: string;
+  archived_at: string | null;
+}
+
+export interface PageSnapshot {
+  id: string;
+  project_id: string;
+  name: string;
+  slug: string;
+  version: number;
+  current_revision_id: string;
+  html: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ProjectSnapshot extends ProjectSummary {
+  pages: PageSnapshot[];
+}
+
+export interface RevisionSummary {
+  id: string;
+  page_id: string;
+  sequence: number;
+  source: string;
+  parent_revision_id: string | null;
+  created_at: string;
+}
+
+export class PageVersionConflictError extends Error {
+  constructor(public currentVersion: number) {
+    super(`A newer page version (${currentVersion}) is already saved`);
+  }
+}
+
 export async function fetchOptions(): Promise<OptionsResponse> {
   const r = await fetch("/api/options");
   if (!r.ok) throw new Error(`options ${r.status}`);
@@ -89,6 +129,82 @@ export async function fetchTemplates(): Promise<string[]> {
   if (!r.ok) throw new Error(`templates ${r.status}`);
   const j = await r.json();
   return j.templates;
+}
+
+export async function fetchProjects(): Promise<ProjectSummary[]> {
+  const r = await fetch("/api/projects");
+  if (!r.ok) throw new Error(`projects ${r.status}`);
+  const result = await r.json();
+  return result.projects;
+}
+
+export async function createProject(name: string, html: string): Promise<ProjectSnapshot> {
+  const r = await fetch("/api/projects", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name, html }),
+  });
+  if (!r.ok) {
+    const d = await r.json().catch(() => ({}));
+    throw new Error(d.detail ?? `projects ${r.status}`);
+  }
+  return r.json();
+}
+
+export async function fetchProject(projectId: string): Promise<ProjectSnapshot> {
+  const r = await fetch(`/api/projects/${encodeURIComponent(projectId)}`);
+  if (!r.ok) throw new Error(`projects ${r.status}`);
+  return r.json();
+}
+
+export async function savePage(
+  pageId: string,
+  html: string,
+  expectedVersion: number,
+  source = "autosave",
+): Promise<PageSnapshot> {
+  const r = await fetch(`/api/pages/${encodeURIComponent(pageId)}/document`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ html, expected_version: expectedVersion, source }),
+  });
+  if (r.status === 409) {
+    const d = await r.json();
+    throw new PageVersionConflictError(d.detail?.current_version ?? expectedVersion);
+  }
+  if (!r.ok) {
+    const d = await r.json().catch(() => ({}));
+    throw new Error(d.detail ?? `pages ${r.status}`);
+  }
+  return r.json();
+}
+
+export async function fetchRevisions(pageId: string): Promise<RevisionSummary[]> {
+  const r = await fetch(`/api/pages/${encodeURIComponent(pageId)}/revisions`);
+  if (!r.ok) throw new Error(`revisions ${r.status}`);
+  const result = await r.json();
+  return result.revisions;
+}
+
+export async function restoreRevision(
+  pageId: string,
+  revisionId: string,
+  expectedVersion: number,
+): Promise<PageSnapshot> {
+  const r = await fetch(
+    `/api/pages/${encodeURIComponent(pageId)}/revisions/${encodeURIComponent(revisionId)}/restore`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ expected_version: expectedVersion }),
+    },
+  );
+  if (r.status === 409) {
+    const d = await r.json();
+    throw new PageVersionConflictError(d.detail?.current_version ?? expectedVersion);
+  }
+  if (!r.ok) throw new Error(`revisions ${r.status}`);
+  return r.json();
 }
 
 export async function saveTemplate(name: string, html: string): Promise<void> {

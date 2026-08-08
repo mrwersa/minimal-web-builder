@@ -7,8 +7,10 @@ layer, plus a LangGraph conversational agent (/api/chat).
 
 from __future__ import annotations
 
+import asyncio
 import typing
 from contextlib import asynccontextmanager
+from functools import partial
 from pathlib import Path
 from typing import Any
 
@@ -20,6 +22,12 @@ from pydantic import BaseModel
 
 from server.agent import run_agent
 from server.agent import set_client as set_agent_client
+from server.projects import (
+    ProjectNotFoundError,
+    ProjectService,
+    ProjectValidationError,
+    VersionConflictError,
+)
 from server.runtime import GenerationClient, build_client, generate, regenerate_section
 from src.a11y import audit_generated_html
 from src.constraints import (
@@ -70,11 +78,15 @@ WEB_DIST = REPO_ROOT / "web" / "dist"
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> typing.AsyncIterator[None]:
     app.state.client = build_client()
+    app.state.projects = ProjectService.from_url(app.state.client.config.database_url)
     try:
         app.state.profiles = load_profiles(PROFILES_DIR)
     except (ValueError, TypeError):
         app.state.profiles = []
-    yield
+    try:
+        yield
+    finally:
+        app.state.projects.close()
 
 
 app = FastAPI(title="Minimal Web Builder API", version="2.0.0", lifespan=lifespan)
@@ -92,6 +104,15 @@ def _client() -> GenerationClient:
 
 def _profiles():
     return app.state.profiles
+
+
+def _projects() -> ProjectService:
+    return app.state.projects
+
+
+async def _offload(function, /, *args, **kwargs):
+    """Run blocking provider, database, or filesystem work outside the event loop."""
+    return await asyncio.to_thread(partial(function, *args, **kwargs))
 
 
 def _sanitize_output(raw: str) -> tuple[str, list[str], list[str]]:
@@ -142,6 +163,25 @@ class ApplyDnaRequest(BaseModel):
     name: str
 
 
+class ProjectCreateRequest(BaseModel):
+    name: str
+    html: str = ""
+
+
+class ProjectUpdateRequest(BaseModel):
+    name: str
+
+
+class PageSaveRequest(BaseModel):
+    html: str
+    expected_version: int
+    source: str = "autosave"
+
+
+class RevisionRestoreRequest(BaseModel):
+    expected_version: int
+
+
 # ---- startup ----
 
 
@@ -149,7 +189,7 @@ class ApplyDnaRequest(BaseModel):
 
 
 @app.get("/api/health")
-def health() -> dict[str, Any]:
+async def health() -> dict[str, Any]:
     cfg = _client().config
     return {
         "ok": True,
@@ -161,7 +201,7 @@ def health() -> dict[str, Any]:
 
 
 @app.get("/api/options")
-def options() -> dict[str, Any]:
+async def options() -> dict[str, Any]:
     profiles = _profiles()
     return {
         "profiles": [
@@ -201,7 +241,7 @@ def _effective_settings(req: GenerateRequest | SectionRegenRequest) -> dict[str,
 
 
 @app.post("/api/generate")
-def generate_page(req: GenerateRequest) -> JSONResponse:
+async def generate_page(req: GenerateRequest) -> JSONResponse:
     cfg = _client().config
     s = _effective_settings(req)
 
@@ -233,7 +273,8 @@ def generate_page(req: GenerateRequest) -> JSONResponse:
     if req.layout_dna_guidance:
         extra = f"{extra}\n{req.layout_dna_guidance}".strip()
 
-    raw = generate(
+    raw = await _offload(
+        generate,
         _client(),
         messages=messages,
         tone_key=s["tone_key"],
@@ -272,7 +313,7 @@ class ChatRequest(BaseModel):
 
 
 @app.post("/api/chat")
-def chat(req: ChatRequest) -> JSONResponse:
+async def chat(req: ChatRequest) -> JSONResponse:
     """Conversational agent endpoint powered by LangGraph.
 
     Maintains conversation memory per ``thread_id`` across turns. The agent
@@ -310,7 +351,8 @@ def chat(req: ChatRequest) -> JSONResponse:
             f"{settings.get('extra_guidance', '')}\n{req.layout_dna_guidance}".strip()
         )
 
-    result = run_agent(
+    result = await _offload(
+        run_agent,
         validated,
         thread_id=req.thread_id,
         current_code=req.current_code,
@@ -350,7 +392,7 @@ class SectionsRequest(BaseModel):
 
 
 @app.post("/api/sections")
-def list_sections(req: SectionsRequest) -> dict[str, Any]:
+async def list_sections(req: SectionsRequest) -> dict[str, Any]:
     sections = extract_sections(req.code)
     return {
         "sections": [
@@ -360,7 +402,7 @@ def list_sections(req: SectionsRequest) -> dict[str, Any]:
 
 
 @app.post("/api/generate-section")
-def generate_section(req: SectionRegenRequest) -> JSONResponse:
+async def generate_section(req: SectionRegenRequest) -> JSONResponse:
     s = _effective_settings(req)
     sections = extract_sections(req.code)
     if req.section_index < 0 or req.section_index >= len(sections):
@@ -371,7 +413,8 @@ def generate_section(req: SectionRegenRequest) -> JSONResponse:
     if req.layout_dna_guidance:
         extra = f"{extra}\n{req.layout_dna_guidance}".strip()
 
-    raw = regenerate_section(
+    raw = await _offload(
+        regenerate_section,
         _client(),
         current_code=req.code,
         section=section,
@@ -407,24 +450,132 @@ def generate_section(req: SectionRegenRequest) -> JSONResponse:
 # ---- templates ----
 
 
+# ---- projects and immutable revisions ----
+
+
+@app.get("/api/projects")
+async def projects_list(include_archived: bool = False) -> dict[str, Any]:
+    projects = await _offload(
+        _projects().list_projects, include_archived=include_archived
+    )
+    return {"projects": projects}
+
+
+@app.post("/api/projects", status_code=201)
+async def projects_create(req: ProjectCreateRequest) -> dict[str, Any]:
+    try:
+        return await _offload(_projects().create_project, req.name, req.html)
+    except ProjectValidationError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+
+@app.get("/api/projects/{project_id}")
+async def projects_get(project_id: str) -> dict[str, Any]:
+    try:
+        return await _offload(_projects().get_project, project_id)
+    except ProjectNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+
+
+@app.patch("/api/projects/{project_id}")
+async def projects_update(project_id: str, req: ProjectUpdateRequest) -> dict[str, Any]:
+    try:
+        return await _offload(_projects().rename_project, project_id, req.name)
+    except ProjectNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+    except ProjectValidationError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+
+@app.delete("/api/projects/{project_id}")
+async def projects_archive(project_id: str) -> dict[str, Any]:
+    try:
+        return await _offload(_projects().archive_project, project_id)
+    except ProjectNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+
+
+@app.get("/api/pages/{page_id}")
+async def pages_get(page_id: str) -> dict[str, Any]:
+    try:
+        return await _offload(_projects().get_page, page_id)
+    except ProjectNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+
+
+@app.put("/api/pages/{page_id}/document")
+async def pages_save(page_id: str, req: PageSaveRequest) -> dict[str, Any]:
+    try:
+        return await _offload(
+            _projects().save_page,
+            page_id,
+            req.html,
+            expected_version=req.expected_version,
+            source=req.source,
+        )
+    except ProjectNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+    except ProjectValidationError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    except VersionConflictError as exc:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "message": "Page has a newer revision",
+                "current_version": exc.current_version,
+            },
+        )
+
+
+@app.get("/api/pages/{page_id}/revisions")
+async def revisions_list(page_id: str) -> dict[str, Any]:
+    try:
+        return {"revisions": await _offload(_projects().list_revisions, page_id)}
+    except ProjectNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+
+
+@app.post("/api/pages/{page_id}/revisions/{revision_id}/restore")
+async def revisions_restore(
+    page_id: str, revision_id: str, req: RevisionRestoreRequest
+) -> dict[str, Any]:
+    try:
+        return await _offload(
+            _projects().restore_revision,
+            page_id,
+            revision_id,
+            expected_version=req.expected_version,
+        )
+    except ProjectNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+    except VersionConflictError as exc:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "message": "Page has a newer revision",
+                "current_version": exc.current_version,
+            },
+        )
+
+
 @app.get("/api/templates")
-def templates_list() -> dict[str, Any]:
-    return {"templates": list_templates(TEMPLATES_DIR)}
+async def templates_list() -> dict[str, Any]:
+    return {"templates": await _offload(list_templates, TEMPLATES_DIR)}
 
 
 @app.post("/api/templates")
-def templates_save(req: TemplateSaveRequest) -> dict[str, Any]:
+async def templates_save(req: TemplateSaveRequest) -> dict[str, Any]:
     try:
-        saved = save_template(TEMPLATES_DIR, req.name, req.html)
+        saved = await _offload(save_template, TEMPLATES_DIR, req.name, req.html)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
     return {"saved": saved.stem}
 
 
 @app.get("/api/templates/{name}")
-def templates_load(name: str) -> dict[str, str]:
+async def templates_load(name: str) -> dict[str, str]:
     try:
-        html = load_template(TEMPLATES_DIR, name)
+        html = await _offload(load_template, TEMPLATES_DIR, name)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
     except FileNotFoundError:
@@ -433,8 +584,8 @@ def templates_load(name: str) -> dict[str, str]:
 
 
 @app.delete("/api/templates/{name}")
-def templates_delete(name: str) -> dict[str, Any]:
-    delete_template(TEMPLATES_DIR, name)
+async def templates_delete(name: str) -> dict[str, Any]:
+    await _offload(delete_template, TEMPLATES_DIR, name)
     return {"deleted": name}
 
 
@@ -442,9 +593,9 @@ def templates_delete(name: str) -> dict[str, Any]:
 
 
 @app.get("/api/layout-dnas")
-def dnas_list() -> dict[str, Any]:
+async def dnas_list() -> dict[str, Any]:
     items = []
-    for name, dna in list_saved_dnas(LAYOUT_DNA_DIR):
+    for name, dna in await _offload(list_saved_dnas, LAYOUT_DNA_DIR):
         items.append(
             {
                 "name": name,
@@ -456,9 +607,9 @@ def dnas_list() -> dict[str, Any]:
 
 
 @app.post("/api/layout-dnas")
-def dnas_save(req: SaveDnaRequest) -> dict[str, Any]:
+async def dnas_save(req: SaveDnaRequest) -> dict[str, Any]:
     dna = extract_layout_dna(req.html)
-    saved = save_dna(LAYOUT_DNA_DIR, dna)
+    saved = await _offload(save_dna, LAYOUT_DNA_DIR, dna)
     return {"name": saved.stem, "signature": grammar_signature(dna)}
 
 
@@ -466,7 +617,7 @@ def dnas_save(req: SaveDnaRequest) -> dict[str, Any]:
 
 
 @app.post("/api/export")
-def export(req: ExportRequest) -> dict[str, Any]:
+async def export(req: ExportRequest) -> dict[str, Any]:
     if req.mode == "split":
         split = split_document(req.html)
         return {
