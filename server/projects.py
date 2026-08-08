@@ -10,19 +10,12 @@ from __future__ import annotations
 from typing import Any
 
 from sqlalchemy import (
-    Engine,
     func,
     select,
     update,
 )
 from sqlalchemy.orm import Session, sessionmaker
 
-from server.database import (
-    Base,
-    create_database_engine,
-    create_session_factory,
-    is_sqlite_url,
-)
 from server.models import (
     MAX_PROJECT_NAME_CHARS,
     PageRecord,
@@ -83,30 +76,16 @@ def _copy_name(name: str) -> str:
 
 
 class ProjectService:
-    def __init__(self, sessions: sessionmaker[Session], engine: Engine):
+    def __init__(self, sessions: sessionmaker[Session]):
         self._sessions = sessions
-        self._engine = engine
 
-    def close(self) -> None:
-        """Release pooled database connections during application shutdown."""
-        self._engine.dispose()
-
-    @classmethod
-    def from_url(
-        cls, database_url: str, *, create_schema: bool | None = None
-    ) -> ProjectService:
-        engine = create_database_engine(database_url)
-        if create_schema is None:
-            create_schema = is_sqlite_url(database_url)
-        if create_schema:
-            Base.metadata.create_all(engine)
-        return cls(create_session_factory(engine), engine)
-
-    def create_project(self, name: str, html: str = "") -> dict[str, Any]:
+    def create_project(
+        self, owner_id: str, name: str, html: str = ""
+    ) -> dict[str, Any]:
         clean_name = _project_name(name)
         clean_html = _document(html)
         with self._sessions.begin() as session:
-            project = ProjectRecord(name=clean_name)
+            project = ProjectRecord(owner_id=owner_id, name=clean_name)
             session.add(project)
             session.flush()
             page = PageRecord(
@@ -120,7 +99,7 @@ class ProjectService:
             return self._project_snapshot(session, project)
 
     def list_projects(
-        self, *, include_archived: bool = False, search: str = ""
+        self, owner_id: str, *, include_archived: bool = False, search: str = ""
     ) -> list[dict[str, Any]]:
         with self._sessions() as session:
             page_count = (
@@ -129,8 +108,10 @@ class ProjectService:
                 .correlate(ProjectRecord)
                 .scalar_subquery()
             )
-            query = select(ProjectRecord, page_count).order_by(
-                ProjectRecord.updated_at.desc()
+            query = (
+                select(ProjectRecord, page_count)
+                .where(ProjectRecord.owner_id == owner_id)
+                .order_by(ProjectRecord.updated_at.desc())
             )
             if not include_archived:
                 query = query.where(ProjectRecord.archived_at.is_(None))
@@ -144,19 +125,17 @@ class ProjectService:
                 for project, count in session.execute(query)
             ]
 
-    def get_project(self, project_id: str) -> dict[str, Any]:
+    def get_project(self, owner_id: str, project_id: str) -> dict[str, Any]:
         with self._sessions() as session:
-            project = session.get(ProjectRecord, project_id)
-            if project is None:
-                raise ProjectNotFoundError("Project not found")
+            project = self._owned_project(session, owner_id, project_id)
             return self._project_snapshot(session, project)
 
-    def rename_project(self, project_id: str, name: str) -> dict[str, Any]:
+    def rename_project(
+        self, owner_id: str, project_id: str, name: str
+    ) -> dict[str, Any]:
         clean_name = _project_name(name)
         with self._sessions.begin() as session:
-            project = session.get(ProjectRecord, project_id)
-            if project is None:
-                raise ProjectNotFoundError("Project not found")
+            project = self._owned_project(session, owner_id, project_id)
             if project.name == clean_name:
                 return self._project_snapshot(session, project)
             project.name = clean_name
@@ -164,16 +143,14 @@ class ProjectService:
             return self._project_snapshot(session, project)
 
     def duplicate_project(
-        self, project_id: str, *, name: str | None = None
+        self, owner_id: str, project_id: str, *, name: str | None = None
     ) -> dict[str, Any]:
         with self._sessions.begin() as session:
-            source = session.get(ProjectRecord, project_id)
-            if source is None:
-                raise ProjectNotFoundError("Project not found")
+            source = self._owned_project(session, owner_id, project_id)
             duplicate_name = (
                 _project_name(name) if name is not None else _copy_name(source.name)
             )
-            duplicate = ProjectRecord(name=duplicate_name)
+            duplicate = ProjectRecord(owner_id=owner_id, name=duplicate_name)
             session.add(duplicate)
             session.flush()
 
@@ -198,26 +175,23 @@ class ProjectService:
                 )
             return self._project_snapshot(session, duplicate)
 
-    def archive_project(self, project_id: str) -> dict[str, Any]:
+    def archive_project(self, owner_id: str, project_id: str) -> dict[str, Any]:
         with self._sessions.begin() as session:
-            project = session.get(ProjectRecord, project_id)
-            if project is None:
-                raise ProjectNotFoundError("Project not found")
+            project = self._owned_project(session, owner_id, project_id)
             if project.archived_at is not None:
                 return self._project_snapshot(session, project)
             project.archived_at = utcnow()
             project.updated_at = project.archived_at
             return self._project_snapshot(session, project)
 
-    def get_page(self, page_id: str) -> dict[str, Any]:
+    def get_page(self, owner_id: str, page_id: str) -> dict[str, Any]:
         with self._sessions() as session:
-            page = session.get(PageRecord, page_id)
-            if page is None:
-                raise ProjectNotFoundError("Page not found")
+            page = self._owned_page(session, owner_id, page_id)
             return self._page_snapshot(session, page)
 
     def save_page(
         self,
+        owner_id: str,
         page_id: str,
         html: str,
         *,
@@ -227,9 +201,7 @@ class ProjectService:
         clean_html = _document(html)
         clean_source = source if source in _REVISION_SOURCES else "manual"
         with self._sessions.begin() as session:
-            page = session.get(PageRecord, page_id)
-            if page is None:
-                raise ProjectNotFoundError("Page not found")
+            page = self._owned_page(session, owner_id, page_id)
             if page.version != expected_version:
                 raise VersionConflictError(page.version)
             current = self._current_revision(session, page)
@@ -239,10 +211,9 @@ class ProjectService:
             self._touch_project(session, page)
             return self._page_snapshot(session, page)
 
-    def list_revisions(self, page_id: str) -> list[dict[str, Any]]:
+    def list_revisions(self, owner_id: str, page_id: str) -> list[dict[str, Any]]:
         with self._sessions() as session:
-            if session.get(PageRecord, page_id) is None:
-                raise ProjectNotFoundError("Page not found")
+            self._owned_page(session, owner_id, page_id)
             query = (
                 select(RevisionRecord)
                 .where(RevisionRecord.page_id == page_id)
@@ -251,12 +222,10 @@ class ProjectService:
             return [self._revision_snapshot(item) for item in session.scalars(query)]
 
     def restore_revision(
-        self, page_id: str, revision_id: str, *, expected_version: int
+        self, owner_id: str, page_id: str, revision_id: str, *, expected_version: int
     ) -> dict[str, Any]:
         with self._sessions.begin() as session:
-            page = session.get(PageRecord, page_id)
-            if page is None:
-                raise ProjectNotFoundError("Page not found")
+            page = self._owned_page(session, owner_id, page_id)
             if page.version != expected_version:
                 raise VersionConflictError(page.version)
             revision = session.get(RevisionRecord, revision_id)
@@ -265,6 +234,30 @@ class ProjectService:
             self._append_revision(session, page, revision.html, "restore")
             self._touch_project(session, page)
             return self._page_snapshot(session, page)
+
+    @staticmethod
+    def _owned_project(
+        session: Session, owner_id: str, project_id: str
+    ) -> ProjectRecord:
+        project = session.scalar(
+            select(ProjectRecord).where(
+                ProjectRecord.id == project_id, ProjectRecord.owner_id == owner_id
+            )
+        )
+        if project is None:
+            raise ProjectNotFoundError("Project not found")
+        return project
+
+    @staticmethod
+    def _owned_page(session: Session, owner_id: str, page_id: str) -> PageRecord:
+        page = session.scalar(
+            select(PageRecord)
+            .join(ProjectRecord, ProjectRecord.id == PageRecord.project_id)
+            .where(PageRecord.id == page_id, ProjectRecord.owner_id == owner_id)
+        )
+        if page is None:
+            raise ProjectNotFoundError("Page not found")
+        return page
 
     @staticmethod
     def _touch_project(session: Session, page: PageRecord) -> None:

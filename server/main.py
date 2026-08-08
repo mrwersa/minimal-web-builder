@@ -20,7 +20,10 @@ from pydantic import BaseModel
 
 from server.agent import run_agent
 from server.agent import set_client as set_agent_client
+from server.auth import AuthService
+from server.auth_routes import router as auth_router
 from server.concurrency import offload
+from server.database import Database
 from server.project_routes import router as project_router
 from server.projects import (
     ProjectNotFoundError,
@@ -30,6 +33,7 @@ from server.projects import (
 )
 from server.runtime import GenerationClient, build_client, generate, regenerate_section
 from src.a11y import audit_generated_html
+from src.config import cors_origins_from_env
 from src.constraints import (
     COLOR_LIMITS,
     SECTION_OPTIONS,
@@ -78,7 +82,12 @@ WEB_DIST = REPO_ROOT / "web" / "dist"
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> typing.AsyncIterator[None]:
     app.state.client = build_client()
-    app.state.projects = ProjectService.from_url(app.state.client.config.database_url)
+    app.state.database = Database.from_url(app.state.client.config.database_url)
+    app.state.auth = AuthService(
+        app.state.database.sessions,
+        session_hours=app.state.client.config.session_hours,
+    )
+    app.state.projects = ProjectService(app.state.database.sessions)
     try:
         app.state.profiles = load_profiles(PROFILES_DIR)
     except (ValueError, TypeError):
@@ -86,16 +95,18 @@ async def lifespan(app: FastAPI) -> typing.AsyncIterator[None]:
     try:
         yield
     finally:
-        app.state.projects.close()
+        app.state.database.close()
 
 
 app = FastAPI(title="Minimal Web Builder API", version="2.0.0", lifespan=lifespan)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=list(cors_origins_from_env()),
+    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+app.include_router(auth_router)
 app.include_router(project_router)
 
 

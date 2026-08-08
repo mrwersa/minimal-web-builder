@@ -3,6 +3,8 @@ from __future__ import annotations
 import pytest
 from fastapi.testclient import TestClient
 
+from server.auth import AuthService
+from server.database import Database
 from server.main import app
 from server.projects import ProjectService
 from server.runtime import GenerationClient
@@ -30,13 +32,21 @@ def client(monkeypatch: pytest.MonkeyPatch, tmp_path):
     )
     app.state.client = generation_client
     app.state.profiles = []
-    app.state.projects = ProjectService.from_url(cfg.database_url)
+    database = Database.from_url(cfg.database_url)
+    app.state.database = database
+    app.state.auth = AuthService(database.sessions, session_hours=cfg.session_hours)
+    app.state.projects = ProjectService(database.sessions)
     test_client = TestClient(app)
+    response = test_client.post(
+        "/api/auth/register",
+        json={"email": "owner@example.test", "password": "correct horse battery"},
+    )
+    assert response.status_code == 201
     try:
         yield test_client
     finally:
         test_client.close()
-        app.state.projects.close()
+        database.close()
 
 
 def test_health(client: TestClient) -> None:
@@ -254,3 +264,59 @@ def test_project_revision_api_round_trip(client: TestClient) -> None:
         item["id"] for item in client.get("/api/projects").json()["projects"]
     ]
     assert created["id"] not in project_ids
+
+
+def test_project_api_requires_authentication(client: TestClient) -> None:
+    client.cookies.clear()
+
+    response = client.get("/api/projects")
+
+    assert response.status_code == 401
+    assert response.json()["detail"] == "Authentication required"
+
+
+def test_authentication_round_trip(client: TestClient) -> None:
+    me = client.get("/api/auth/me")
+    assert me.status_code == 200
+    assert me.json()["email"] == "owner@example.test"
+
+    assert client.post("/api/auth/logout").status_code == 204
+    assert client.get("/api/auth/me").status_code == 401
+
+    invalid = client.post(
+        "/api/auth/login",
+        json={"email": "owner@example.test", "password": "wrong password value"},
+    )
+    assert invalid.status_code == 401
+
+    login = client.post(
+        "/api/auth/login",
+        json={"email": "OWNER@example.test", "password": "correct horse battery"},
+    )
+    assert login.status_code == 200
+    assert client.get("/api/auth/me").status_code == 200
+
+
+def test_duplicate_registration_is_rejected(client: TestClient) -> None:
+    response = client.post(
+        "/api/auth/register",
+        json={"email": "OWNER@example.test", "password": "another secure password"},
+    )
+
+    assert response.status_code == 409
+
+
+def test_project_api_does_not_expose_another_users_project(client: TestClient) -> None:
+    project = client.post(
+        "/api/projects", json={"name": "Private", "html": "secret"}
+    ).json()
+    assert client.post("/api/auth/logout").status_code == 204
+    second_user = client.post(
+        "/api/auth/register",
+        json={"email": "second@example.test", "password": "another secure password"},
+    )
+    assert second_user.status_code == 201
+
+    assert client.get("/api/projects").json()["projects"] == []
+    assert client.get(f"/api/projects/{project['id']}").status_code == 404
+    assert client.get(f"/api/pages/{project['pages'][0]['id']}").status_code == 404

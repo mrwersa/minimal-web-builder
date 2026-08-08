@@ -3,7 +3,7 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass
 
-from dotenv import load_dotenv
+from dotenv import dotenv_values, load_dotenv
 
 GEMINI_PROVIDER = "gemini"
 OPENROUTER_PROVIDER = "openrouter"
@@ -24,6 +24,12 @@ class AppConfig:
     openrouter_model: str = DEFAULT_OPENROUTER_MODEL
     openrouter_base_url: str = DEFAULT_OPENROUTER_BASE_URL
     database_url: str = "sqlite:///./data/minimal-web-builder.db"
+    session_cookie_secure: bool = False
+    session_hours: int = 168
+    cors_origins: tuple[str, ...] = (
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+    )
 
 
 def _float_env(name: str, default: float) -> float:
@@ -50,6 +56,23 @@ def _str_env(name: str, default: str = "") -> str:
     return os.getenv(name, default).strip()
 
 
+def _bool_env(name: str, default: bool) -> bool:
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    return raw.strip().lower() in {"1", "true", "yes", "on"}
+
+
+def cors_origins_from_env(
+    dotenv_path: str | os.PathLike | None = ".env",
+) -> tuple[str, ...]:
+    raw = os.getenv("CORS_ORIGINS")
+    if raw is None and dotenv_path is not None:
+        raw = dotenv_values(dotenv_path).get("CORS_ORIGINS")
+    raw = (raw or "http://localhost:5173,http://127.0.0.1:5173").strip()
+    return tuple(origin.strip() for origin in raw.split(",") if origin.strip())
+
+
 def load_config(dotenv_path: str | os.PathLike | None = None) -> AppConfig:
     load_dotenv(dotenv_path)
     provider = _str_env("GENERATION_PROVIDER", GEMINI_PROVIDER).lower()
@@ -71,4 +94,7 @@ def load_config(dotenv_path: str | os.PathLike | None = None) -> AppConfig:
         database_url=_str_env(
             "DATABASE_URL", "sqlite:///./data/minimal-web-builder.db"
         ),
+        session_cookie_secure=_bool_env("SESSION_COOKIE_SECURE", False),
+        session_hours=max(1, _int_env("SESSION_HOURS", 168)),
+        cors_origins=cors_origins_from_env(),
     )
