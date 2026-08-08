@@ -21,6 +21,9 @@ vi.mock("./api", () => ({
   fetchProjects: vi.fn(),
   createProject: vi.fn(),
   fetchProject: vi.fn(),
+  renameProject: vi.fn(),
+  duplicateProject: vi.fn(),
+  archiveProject: vi.fn(),
   savePage: vi.fn(),
   fetchRevisions: vi.fn(),
   restoreRevision: vi.fn(),
@@ -72,6 +75,7 @@ describe("document revision workflows", () => {
       constraintDensity: "balanced",
       projects: [],
       projectName: "",
+      projectSearch: "",
       activeProjectId: null,
       activePageId: null,
       activePageVersion: 0,
@@ -207,5 +211,46 @@ describe("document revision workflows", () => {
 
     expect(useStore.getState().activePageId).toBe("page-2");
     expect(useStore.getState().activePageVersion).toBe(7);
+  });
+
+  it("renames and refreshes a project", async () => {
+    vi.mocked(api.renameProject).mockResolvedValue({ ...project, name: "New name" });
+
+    await useStore.getState().renameProject("project-1", "  New name  ");
+
+    expect(api.renameProject).toHaveBeenCalledWith("project-1", "New name");
+    expect(api.fetchProjects).toHaveBeenCalledWith("");
+  });
+
+  it("does not duplicate an active project with unsaved changes", async () => {
+    useStore.setState({
+      activeProjectId: "project-1",
+      activePageId: "page-1",
+      saveState: "idle",
+    });
+
+    await useStore.getState().duplicateProject("project-1");
+
+    expect(api.duplicateProject).not.toHaveBeenCalled();
+    expect(useStore.getState().error).toContain("Save the active project");
+  });
+
+  it("archives a saved active project and detaches the document", async () => {
+    useStore.setState({
+      activeProjectId: "project-1",
+      activePageId: "page-1",
+      activePageVersion: 2,
+      saveState: "saved",
+    });
+    vi.mocked(api.archiveProject).mockResolvedValue({
+      ...project,
+      archived_at: "2026-08-08T01:00:00Z",
+    });
+
+    await useStore.getState().archiveProject("project-1");
+
+    expect(api.archiveProject).toHaveBeenCalledWith("project-1");
+    expect(useStore.getState().activeProjectId).toBeNull();
+    expect(useStore.getState().activePageId).toBeNull();
   });
 });

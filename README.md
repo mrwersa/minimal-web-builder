@@ -46,7 +46,13 @@ A sleek, minimalist web application builder powered by AI (Gemini / OpenRouter).
 2. Create a `.env` with an API key (see below).
    The default `DATABASE_URL` uses `./data/minimal-web-builder.db`; set a
    `postgresql+psycopg://...` URL for a production PostgreSQL database.
-3. Run both processes:
+3. Apply database migrations before starting a production/PostgreSQL deployment:
+   ```bash
+   alembic upgrade head
+   ```
+   Local SQLite development creates its schema automatically; migrations remain
+   the canonical production schema history.
+4. Run both processes:
    ```bash
    # terminal 1: API
    uvicorn server.main:app --port 8000 --reload
@@ -71,7 +77,7 @@ For a single-process production build, run `cd web && npm run build` then
 6. Use the "View Code" tab to see the HTML/CSS/JS
 7. In the Code tab, pick an export format: **Single HTML** downloads one self-contained `index.html`, or **Split** downloads `index.html`, `styles.css`, and `app.js` (inline styles and scripts are extracted into the separate files)
 8. In the sidebar you can **save the current page as a template**, then use the folder button beside a saved template to open it as a fresh conversation
-9. In **Projects**, name and create a durable project from the current page. Later edits autosave as immutable revisions; open Version history to restore an earlier result.
+9. In **Projects**, create, search, rename, duplicate, or archive durable projects. Later edits autosave as immutable revisions; open Version history to restore an earlier result.
 
 To refine a single section after generation, open the sidebar, pick a section from the "Regenerate section" dropdown, choose a **Refine focus** (General, Spacing, Typography, Layout, or Color), and press **Regenerate section**. The selected block is regenerated in place while the rest of the page stays untouched.
 

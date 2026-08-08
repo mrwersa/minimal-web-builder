@@ -37,6 +37,7 @@ interface State {
 
   projects: api.ProjectSummary[];
   projectName: string;
+  projectSearch: string;
   activeProjectId: string | null;
   activePageId: string | null;
   activePageVersion: number;
@@ -65,6 +66,9 @@ interface State {
   refreshProjects: () => Promise<void>;
   createCurrentProject: () => Promise<void>;
   openProject: (projectId: string) => Promise<void>;
+  renameProject: (projectId: string, name: string) => Promise<void>;
+  duplicateProject: (projectId: string) => Promise<void>;
+  archiveProject: (projectId: string) => Promise<void>;
   saveActivePage: () => Promise<void>;
   refreshRevisions: () => Promise<void>;
   restoreRevision: (revisionId: string) => Promise<void>;
@@ -76,6 +80,7 @@ interface State {
 }
 
 let autosaveTimer: ReturnType<typeof setTimeout> | null = null;
+let projectRequestSequence = 0;
 
 function scheduleAutosave(get: () => State, delay = 800) {
   if (!get().activePageId) return;
@@ -84,6 +89,10 @@ function scheduleAutosave(get: () => State, delay = 800) {
     autosaveTimer = null;
     void get().saveActivePage();
   }, delay);
+}
+
+function hasPendingProjectChanges(state: State, projectId: string): boolean {
+  return state.activeProjectId === projectId && state.saveState !== "saved";
 }
 
 export const useStore = create<State>((set, get) => ({
@@ -122,6 +131,7 @@ export const useStore = create<State>((set, get) => ({
 
   projects: [],
   projectName: "",
+  projectSearch: "",
   activeProjectId: null,
   activePageId: null,
   activePageVersion: 0,
@@ -293,10 +303,14 @@ export const useStore = create<State>((set, get) => ({
   },
 
   refreshProjects: async () => {
+    const requestSequence = ++projectRequestSequence;
     try {
-      set({ projects: await api.fetchProjects() });
+      const projects = await api.fetchProjects(get().projectSearch);
+      if (requestSequence === projectRequestSequence) set({ projects });
     } catch (e) {
-      set({ error: String(e instanceof Error ? e.message : e) });
+      if (requestSequence === projectRequestSequence) {
+        set({ error: String(e instanceof Error ? e.message : e) });
+      }
     }
   },
 
@@ -355,6 +369,55 @@ export const useStore = create<State>((set, get) => ({
         error: null,
       });
       await get().refreshRevisions();
+    } catch (e) {
+      set({ error: String(e instanceof Error ? e.message : e) });
+    }
+  },
+
+  renameProject: async (projectId, name) => {
+    const cleanName = name.trim();
+    if (!cleanName) return;
+    try {
+      await api.renameProject(projectId, cleanName);
+      await get().refreshProjects();
+      set({ error: null });
+    } catch (e) {
+      set({ error: String(e instanceof Error ? e.message : e) });
+    }
+  },
+
+  duplicateProject: async (projectId) => {
+    if (hasPendingProjectChanges(get(), projectId)) {
+      set({ error: "Save the active project before duplicating it" });
+      return;
+    }
+    try {
+      const project = await api.duplicateProject(projectId);
+      await get().refreshProjects();
+      await get().openProject(project.id);
+    } catch (e) {
+      set({ error: String(e instanceof Error ? e.message : e) });
+    }
+  },
+
+  archiveProject: async (projectId) => {
+    if (hasPendingProjectChanges(get(), projectId)) {
+      set({ error: "Save the active project before archiving it" });
+      return;
+    }
+    try {
+      await api.archiveProject(projectId);
+      if (get().activeProjectId === projectId) {
+        set({
+          activeProjectId: null,
+          activePageId: null,
+          activePageVersion: 0,
+          revisions: [],
+          saveState: "idle",
+        });
+      }
+      await get().refreshProjects();
+      set({ error: null });
     } catch (e) {
       set({ error: String(e instanceof Error ? e.message : e) });
     }

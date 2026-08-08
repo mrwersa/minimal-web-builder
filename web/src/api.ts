@@ -37,7 +37,7 @@ export interface PageSnapshot {
   name: string;
   slug: string;
   version: number;
-  current_revision_id: string;
+  current_revision_id: string | null;
   html: string;
   created_at: string;
   updated_at: string;
@@ -62,10 +62,37 @@ export class PageVersionConflictError extends Error {
   }
 }
 
+const JSON_HEADERS = { "Content-Type": "application/json" };
+
+function jsonRequest(method: string, body: unknown): RequestInit {
+  return { method, headers: JSON_HEADERS, body: JSON.stringify(body) };
+}
+
+async function readJson<T>(response: Response, fallback: string): Promise<T> {
+  if (!response.ok) {
+    const payload = await response.json().catch(() => ({}));
+    const detail = payload.detail;
+    const message =
+      typeof detail === "string"
+        ? detail
+        : typeof detail?.message === "string"
+          ? detail.message
+          : fallback;
+    throw new Error(message);
+  }
+  return response.json();
+}
+
+async function requestJson<T>(
+  url: string,
+  init?: RequestInit,
+  fallback = `request ${url}`,
+): Promise<T> {
+  return readJson<T>(await fetch(url, init), fallback);
+}
+
 export async function fetchOptions(): Promise<OptionsResponse> {
-  const r = await fetch("/api/options");
-  if (!r.ok) throw new Error(`options ${r.status}`);
-  return r.json();
+  return requestJson("/api/options", undefined, "Unable to load options");
 }
 
 export async function generate(req: {
@@ -78,27 +105,20 @@ export async function generate(req: {
   layout_dna_guidance: string;
   constraints?: { sections: string[]; color_limit: string; density: string };
 }): Promise<GenerateResponse> {
-  const r = await fetch("/api/generate", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(req),
-  });
-  if (!r.ok) {
-    const d = await r.json().catch(() => ({}));
-    throw new Error(d.detail ?? `generate ${r.status}`);
-  }
-  return r.json();
+  return requestJson(
+    "/api/generate",
+    jsonRequest("POST", req),
+    "Generation failed",
+  );
 }
 
 export async function fetchSections(code: string): Promise<SectionInfo[]> {
-  const r = await fetch("/api/sections", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ code }),
-  });
-  if (!r.ok) throw new Error(`sections ${r.status}`);
-  const j = await r.json();
-  return j.sections;
+  const result = await requestJson<{ sections: SectionInfo[] }>(
+    "/api/sections",
+    jsonRequest("POST", { code }),
+    "Unable to inspect sections",
+  );
+  return result.sections;
 }
 
 export async function regenerateSection(req: {
@@ -112,49 +132,76 @@ export async function regenerateSection(req: {
   layout_dna_guidance: string;
   refine_aspect: string | null;
 }): Promise<{ html: string; safety_alerts: string[]; notes: string[] }> {
-  const r = await fetch("/api/generate-section", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(req),
-  });
-  if (!r.ok) {
-    const d = await r.json().catch(() => ({}));
-    throw new Error(d.detail ?? `generate-section ${r.status}`);
-  }
-  return r.json();
+  return requestJson(
+    "/api/generate-section",
+    jsonRequest("POST", req),
+    "Section regeneration failed",
+  );
 }
 
 export async function fetchTemplates(): Promise<string[]> {
-  const r = await fetch("/api/templates");
-  if (!r.ok) throw new Error(`templates ${r.status}`);
-  const j = await r.json();
-  return j.templates;
+  const result = await requestJson<{ templates: string[] }>(
+    "/api/templates",
+    undefined,
+    "Unable to load templates",
+  );
+  return result.templates;
 }
 
-export async function fetchProjects(): Promise<ProjectSummary[]> {
-  const r = await fetch("/api/projects");
-  if (!r.ok) throw new Error(`projects ${r.status}`);
-  const result = await r.json();
+export async function fetchProjects(search = ""): Promise<ProjectSummary[]> {
+  const query = search.trim() ? `?search=${encodeURIComponent(search.trim())}` : "";
+  const result = await requestJson<{ projects: ProjectSummary[] }>(
+    `/api/projects${query}`,
+    undefined,
+    "Unable to load projects",
+  );
   return result.projects;
 }
 
 export async function createProject(name: string, html: string): Promise<ProjectSnapshot> {
-  const r = await fetch("/api/projects", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ name, html }),
-  });
-  if (!r.ok) {
-    const d = await r.json().catch(() => ({}));
-    throw new Error(d.detail ?? `projects ${r.status}`);
-  }
-  return r.json();
+  return requestJson(
+    "/api/projects",
+    jsonRequest("POST", { name, html }),
+    "Unable to create project",
+  );
 }
 
 export async function fetchProject(projectId: string): Promise<ProjectSnapshot> {
-  const r = await fetch(`/api/projects/${encodeURIComponent(projectId)}`);
-  if (!r.ok) throw new Error(`projects ${r.status}`);
-  return r.json();
+  return requestJson(
+    `/api/projects/${encodeURIComponent(projectId)}`,
+    undefined,
+    "Unable to open project",
+  );
+}
+
+export async function renameProject(
+  projectId: string,
+  name: string,
+): Promise<ProjectSnapshot> {
+  return requestJson(
+    `/api/projects/${encodeURIComponent(projectId)}`,
+    jsonRequest("PATCH", { name }),
+    "Unable to rename project",
+  );
+}
+
+export async function duplicateProject(
+  projectId: string,
+  name?: string,
+): Promise<ProjectSnapshot> {
+  return requestJson(
+    `/api/projects/${encodeURIComponent(projectId)}/duplicate`,
+    jsonRequest("POST", { name }),
+    "Unable to duplicate project",
+  );
+}
+
+export async function archiveProject(projectId: string): Promise<ProjectSnapshot> {
+  return requestJson(
+    `/api/projects/${encodeURIComponent(projectId)}`,
+    { method: "DELETE" },
+    "Unable to archive project",
+  );
 }
 
 export async function savePage(
@@ -163,26 +210,23 @@ export async function savePage(
   expectedVersion: number,
   source = "autosave",
 ): Promise<PageSnapshot> {
-  const r = await fetch(`/api/pages/${encodeURIComponent(pageId)}/document`, {
-    method: "PUT",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ html, expected_version: expectedVersion, source }),
-  });
+  const r = await fetch(
+    `/api/pages/${encodeURIComponent(pageId)}/document`,
+    jsonRequest("PUT", { html, expected_version: expectedVersion, source }),
+  );
   if (r.status === 409) {
     const d = await r.json();
     throw new PageVersionConflictError(d.detail?.current_version ?? expectedVersion);
   }
-  if (!r.ok) {
-    const d = await r.json().catch(() => ({}));
-    throw new Error(d.detail ?? `pages ${r.status}`);
-  }
-  return r.json();
+  return readJson(r, "Unable to save page");
 }
 
 export async function fetchRevisions(pageId: string): Promise<RevisionSummary[]> {
-  const r = await fetch(`/api/pages/${encodeURIComponent(pageId)}/revisions`);
-  if (!r.ok) throw new Error(`revisions ${r.status}`);
-  const result = await r.json();
+  const result = await requestJson<{ revisions: RevisionSummary[] }>(
+    `/api/pages/${encodeURIComponent(pageId)}/revisions`,
+    undefined,
+    "Unable to load version history",
+  );
   return result.revisions;
 }
 
@@ -193,45 +237,38 @@ export async function restoreRevision(
 ): Promise<PageSnapshot> {
   const r = await fetch(
     `/api/pages/${encodeURIComponent(pageId)}/revisions/${encodeURIComponent(revisionId)}/restore`,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ expected_version: expectedVersion }),
-    },
+    jsonRequest("POST", { expected_version: expectedVersion }),
   );
   if (r.status === 409) {
     const d = await r.json();
     throw new PageVersionConflictError(d.detail?.current_version ?? expectedVersion);
   }
-  if (!r.ok) throw new Error(`revisions ${r.status}`);
-  return r.json();
+  return readJson(r, "Unable to restore revision");
 }
 
 export async function saveTemplate(name: string, html: string): Promise<void> {
-  const r = await fetch("/api/templates", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ name, html }),
-  });
-  if (!r.ok) {
-    const d = await r.json().catch(() => ({}));
-    throw new Error(d.detail ?? `templates ${r.status}`);
-  }
+  await requestJson(
+    "/api/templates",
+    jsonRequest("POST", { name, html }),
+    "Unable to save template",
+  );
 }
 
 export async function loadTemplate(name: string): Promise<string> {
-  const r = await fetch(`/api/templates/${encodeURIComponent(name)}`);
-  if (!r.ok) {
-    const d = await r.json().catch(() => ({}));
-    throw new Error(d.detail ?? `templates ${r.status}`);
-  }
-  const result = await r.json();
+  const result = await requestJson<{ html: string }>(
+    `/api/templates/${encodeURIComponent(name)}`,
+    undefined,
+    "Unable to load template",
+  );
   return result.html;
 }
 
 export async function deleteTemplate(name: string): Promise<void> {
-  const r = await fetch(`/api/templates/${encodeURIComponent(name)}`, { method: "DELETE" });
-  if (!r.ok) throw new Error(`templates ${r.status}`);
+  await requestJson(
+    `/api/templates/${encodeURIComponent(name)}`,
+    { method: "DELETE" },
+    "Unable to delete template",
+  );
 }
 
 export interface DnaItem {
@@ -241,32 +278,31 @@ export interface DnaItem {
 }
 
 export async function fetchDnas(): Promise<DnaItem[]> {
-  const r = await fetch("/api/layout-dnas");
-  if (!r.ok) throw new Error(`dnas ${r.status}`);
-  const j = await r.json();
-  return j.dnas;
+  const result = await requestJson<{ dnas: DnaItem[] }>(
+    "/api/layout-dnas",
+    undefined,
+    "Unable to load layout DNA",
+  );
+  return result.dnas;
 }
 
 export async function saveDna(html: string): Promise<void> {
-  const r = await fetch("/api/layout-dnas", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ html }),
-  });
-  if (!r.ok) throw new Error(`dnas ${r.status}`);
+  await requestJson(
+    "/api/layout-dnas",
+    jsonRequest("POST", { html }),
+    "Unable to save layout DNA",
+  );
 }
 
 export async function exportPage(
   html: string,
   mode: "single" | "split"
 ): Promise<{ mode: string; files: Record<string, string> }> {
-  const r = await fetch("/api/export", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ html, mode }),
-  });
-  if (!r.ok) throw new Error(`export ${r.status}`);
-  return r.json();
+  return requestJson(
+    "/api/export",
+    jsonRequest("POST", { html, mode }),
+    "Unable to export page",
+  );
 }
 
 export interface ChatMessage {
@@ -293,14 +329,9 @@ export async function chat(req: {
   profile: string | null;
   layout_dna_guidance: string;
 }): Promise<ChatResponse> {
-  const r = await fetch("/api/chat", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(req),
-  });
-  if (!r.ok) {
-    const d = await r.json().catch(() => ({}));
-    throw new Error(d.detail ?? `chat ${r.status}`);
-  }
-  return r.json();
+  return requestJson(
+    "/api/chat",
+    jsonRequest("POST", req),
+    "Chat request failed",
+  );
 }

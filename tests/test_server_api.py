@@ -229,3 +229,28 @@ def test_project_revision_api_round_trip(client: TestClient) -> None:
     assert restored.status_code == 200
     assert restored.json()["html"] == "<main>v1</main>"
     assert restored.json()["version"] == 3
+
+    renamed = client.patch(
+        f"/api/projects/{created['id']}", json={"name": "Renamed Product"}
+    )
+    assert renamed.status_code == 200
+    assert renamed.json()["name"] == "Renamed Product"
+
+    duplicate = client.post(
+        f"/api/projects/{created['id']}/duplicate", json={"name": None}
+    )
+    assert duplicate.status_code == 201
+    assert duplicate.json()["name"] == "Renamed Product Copy"
+    assert duplicate.json()["pages"][0]["html"] == "<main>v1</main>"
+
+    search = client.get("/api/projects", params={"search": "renamed product copy"})
+    assert [item["id"] for item in search.json()["projects"]] == [
+        duplicate.json()["id"]
+    ]
+
+    archived = client.delete(f"/api/projects/{created['id']}")
+    assert archived.status_code == 200
+    project_ids = [
+        item["id"] for item in client.get("/api/projects").json()["projects"]
+    ]
+    assert created["id"] not in project_ids

@@ -38,6 +38,8 @@ def test_project_survives_service_restart(tmp_path) -> None:
     assert restarted.get_project(created["id"])["pages"][0]["html"] == (
         "<main>saved</main>"
     )
+    first.close()
+    restarted.close()
 
 
 def test_save_page_creates_immutable_revision(projects: ProjectService) -> None:
@@ -91,6 +93,34 @@ def test_project_name_validation(projects: ProjectService) -> None:
         projects.create_project("   ")
 
 
+def test_search_and_rename_projects(projects: ProjectService) -> None:
+    launch = projects.create_project("Launch Site")
+    projects.create_project("Portfolio")
+
+    renamed = projects.rename_project(launch["id"], "Product Launch")
+
+    assert renamed["name"] == "Product Launch"
+    assert [item["id"] for item in projects.list_projects(search="LAUNCH")] == [
+        launch["id"]
+    ]
+
+
+def test_duplicate_project_copies_current_page_state(projects: ProjectService) -> None:
+    source = projects.create_project("Original", "v1")
+    source_page = source["pages"][0]
+    projects.save_page(source_page["id"], "v2", expected_version=1)
+
+    duplicate = projects.duplicate_project(source["id"])
+    duplicate_page = duplicate["pages"][0]
+
+    assert duplicate["name"] == "Original Copy"
+    assert duplicate["id"] != source["id"]
+    assert duplicate_page["id"] != source_page["id"]
+    assert duplicate_page["html"] == "v2"
+    assert duplicate_page["version"] == 1
+    assert projects.list_revisions(duplicate_page["id"])[0]["source"] == "duplicate"
+
+
 def test_archive_hides_project_by_default(projects: ProjectService) -> None:
     created = projects.create_project("Archive")
 
@@ -99,3 +129,7 @@ def test_archive_hides_project_by_default(projects: ProjectService) -> None:
     assert archived["archived_at"] is not None
     assert projects.list_projects() == []
     assert len(projects.list_projects(include_archived=True)) == 1
+    assert (
+        projects.archive_project(created["id"])["archived_at"]
+        == archived["archived_at"]
+    )

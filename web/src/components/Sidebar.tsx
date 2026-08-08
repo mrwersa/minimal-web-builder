@@ -1,7 +1,7 @@
 import { useEffect } from "react";
 import {
   Sparkles, Sliders, Wand2, Layers, Save, Trash2, FolderOpen,
-  MousePointerClick, ChevronDown, FolderKanban, RotateCcw, Cloud,
+  MousePointerClick, ChevronDown, FolderKanban,
 } from "lucide-react";
 import { useStore } from "../store";
 import { cn } from "../lib/utils";
@@ -10,6 +10,7 @@ import { Switch } from "./ui/Switch";
 import { Button } from "./ui/Button";
 import { Input } from "./ui/Input";
 import { Separator } from "./ui/Separator";
+import ProjectPanel from "./ProjectPanel";
 
 const COL_LABEL = "mb-1 block text-[11px] font-semibold uppercase tracking-wider text-muted2";
 
@@ -34,7 +35,7 @@ export default function Sidebar() {
   const opts = s.options;
 
   useEffect(() => { if (s.code) s.refreshSections(); }, [s.code]); // eslint-disable-line
-  useEffect(() => { s.refreshTemplates(); s.refreshDnas(); s.refreshProjects(); }, []); // eslint-disable-line
+  useEffect(() => { s.refreshTemplates(); s.refreshDnas(); }, []); // eslint-disable-line
 
   if (!opts) {
     return (
@@ -59,68 +60,7 @@ export default function Sidebar() {
       <div className="flex-1 space-y-1 overflow-y-auto px-4 py-2">
         {/* Projects */}
         <CollapsibleSection icon={<FolderKanban className="h-4 w-4" />} title="Projects">
-          <div className="space-y-2">
-            <div className="flex gap-2">
-              <Input
-                value={s.projectName}
-                onChange={(e) => s.set("projectName", e.target.value)}
-                placeholder="New project name"
-                className="flex-1"
-              />
-              <Button variant="outline" onClick={() => s.createCurrentProject()} disabled={!s.projectName.trim()}>
-                Create
-              </Button>
-            </div>
-
-            {s.activeProjectId && (
-              <div className="flex items-center justify-between rounded-lg bg-bg px-2.5 py-2 text-xs">
-                <span className="flex items-center gap-1.5 text-muted">
-                  <Cloud className="h-3.5 w-3.5" />
-                  {s.saveState === "saving" ? "Saving…" : s.saveState === "conflict" ? "Save conflict" : `Saved · v${s.activePageVersion}`}
-                </span>
-                <button onClick={() => s.saveActivePage()} className="font-medium text-accent hover:underline">Save now</button>
-              </div>
-            )}
-
-            {s.projects.length > 0 && (
-              <div className="space-y-1">
-                {s.projects.map((project) => (
-                  <button
-                    key={project.id}
-                    onClick={() => s.openProject(project.id)}
-                    className={cn(
-                      "flex w-full items-center justify-between rounded-lg border px-2.5 py-2 text-left text-xs",
-                      s.activeProjectId === project.id ? "border-accent bg-accentSoft text-accent" : "border-border2 text-muted hover:border-muted2",
-                    )}
-                  >
-                    <span className="truncate font-medium">{project.name}</span>
-                    <span className="ml-2 shrink-0 text-muted2">{project.page_count} page</span>
-                  </button>
-                ))}
-              </div>
-            )}
-
-            {s.revisions.length > 1 && (
-              <details className="rounded-lg border border-border2 p-2">
-                <summary className="cursor-pointer text-xs font-medium text-muted">Version history</summary>
-                <div className="mt-2 space-y-1">
-                  {s.revisions.slice(0, 8).map((revision) => (
-                    <div key={revision.id} className="flex items-center justify-between rounded px-1.5 py-1 text-xs text-muted2">
-                      <span>v{revision.sequence} · {revision.source}</span>
-                      <button
-                        onClick={() => s.restoreRevision(revision.id)}
-                        disabled={revision.sequence === s.activePageVersion}
-                        title={`Restore version ${revision.sequence}`}
-                        className="rounded p-1 hover:bg-accentSoft hover:text-accent disabled:opacity-30"
-                      >
-                        <RotateCcw className="h-3.5 w-3.5" />
-                      </button>
-                    </div>
-                  ))}
-                </div>
-              </details>
-            )}
-          </div>
+          <ProjectPanel />
         </CollapsibleSection>
 
         {/* Generation */}
