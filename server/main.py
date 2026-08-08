@@ -1,7 +1,7 @@
 """FastAPI backend for the Minimal Web Builder React frontend.
 
 Reuses the existing ``src/*`` modules (generation, safety, a11y, sections,
-export, templates, layout_dna, profiles, theme, constraints) as a service
+export, layout_dna, profiles, theme, constraints) as a service
 layer, plus a LangGraph conversational agent (/api/chat).
 """
 
@@ -20,9 +20,16 @@ from pydantic import BaseModel
 
 from server.agent import run_agent
 from server.agent import set_client as set_agent_client
+from server.asset_routes import router as asset_router
+from server.assets import (
+    ReusableAssetNotFoundError,
+    ReusableAssetService,
+    ReusableAssetValidationError,
+)
 from server.auth import AuthService
 from server.auth_routes import router as auth_router
 from server.concurrency import offload
+from server.content import DocumentValidationError
 from server.database import Database
 from server.project_routes import router as project_router
 from server.projects import (
@@ -42,13 +49,6 @@ from src.constraints import (
 from src.export import split_document
 from src.generation import strip_html_code_fence
 from src.js_analysis import audit_inline_scripts
-from src.layout_dna import (
-    extract_layout_dna,
-    grammar_signature,
-    list_saved_dnas,
-    save_dna,
-    to_guidance,
-)
 from src.profiles import (
     CUSTOM_PROFILE_ID,
     get_profile,
@@ -56,12 +56,6 @@ from src.profiles import (
 )
 from src.safety import apply_output_safety_policy
 from src.sections import extract_first_top_level, extract_sections, replace_section
-from src.templates import (
-    delete_template,
-    list_templates,
-    load_template,
-    save_template,
-)
 from src.theme import (
     COLORS,
     COMPLEXITY_BY_KEY,
@@ -74,8 +68,6 @@ from src.validation import validate_user_prompt
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 PROFILES_DIR = REPO_ROOT / "profiles"
-TEMPLATES_DIR = REPO_ROOT / "templates"
-LAYOUT_DNA_DIR = REPO_ROOT / "layout_dna"
 WEB_DIST = REPO_ROOT / "web" / "dist"
 
 
@@ -88,6 +80,7 @@ async def lifespan(app: FastAPI) -> typing.AsyncIterator[None]:
         session_hours=app.state.client.config.session_hours,
     )
     app.state.projects = ProjectService(app.state.database.sessions)
+    app.state.assets = ReusableAssetService(app.state.database.sessions)
     try:
         app.state.profiles = load_profiles(PROFILES_DIR)
     except (ValueError, TypeError):
@@ -107,6 +100,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 app.include_router(auth_router)
+app.include_router(asset_router)
 app.include_router(project_router)
 
 
@@ -120,6 +114,21 @@ async def project_not_found_handler(
 @app.exception_handler(ProjectValidationError)
 async def project_validation_handler(
     _request: Request, exc: ProjectValidationError
+) -> JSONResponse:
+    return JSONResponse(status_code=400, content={"detail": str(exc)})
+
+
+@app.exception_handler(ReusableAssetNotFoundError)
+async def reusable_asset_not_found_handler(
+    _request: Request, exc: ReusableAssetNotFoundError
+) -> JSONResponse:
+    return JSONResponse(status_code=404, content={"detail": str(exc)})
+
+
+@app.exception_handler(ReusableAssetValidationError)
+@app.exception_handler(DocumentValidationError)
+async def content_validation_handler(
+    _request: Request, exc: ValueError
 ) -> JSONResponse:
     return JSONResponse(status_code=400, content={"detail": str(exc)})
 
@@ -177,18 +186,9 @@ class SectionRegenRequest(BaseModel):
     refine_aspect: str | None = None
 
 
-class TemplateSaveRequest(BaseModel):
-    name: str
-    html: str
-
-
 class ExportRequest(BaseModel):
     html: str
     mode: str = "single"  # "single" | "split"
-
-
-class SaveDnaRequest(BaseModel):
-    html: str
 
 
 # ---- routes ----
@@ -448,61 +448,6 @@ async def generate_section(req: SectionRegenRequest) -> JSONResponse:
             "notes": notes,
         }
     )
-
-
-@app.get("/api/templates")
-async def templates_list() -> dict[str, Any]:
-    return {"templates": await offload(list_templates, TEMPLATES_DIR)}
-
-
-@app.post("/api/templates")
-async def templates_save(req: TemplateSaveRequest) -> dict[str, Any]:
-    try:
-        saved = await offload(save_template, TEMPLATES_DIR, req.name, req.html)
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc))
-    return {"saved": saved.stem}
-
-
-@app.get("/api/templates/{name}")
-async def templates_load(name: str) -> dict[str, str]:
-    try:
-        html = await offload(load_template, TEMPLATES_DIR, name)
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc))
-    except FileNotFoundError:
-        raise HTTPException(status_code=404, detail="Template not found")
-    return {"name": name, "html": html}
-
-
-@app.delete("/api/templates/{name}")
-async def templates_delete(name: str) -> dict[str, Any]:
-    await offload(delete_template, TEMPLATES_DIR, name)
-    return {"deleted": name}
-
-
-# ---- layout DNA ----
-
-
-@app.get("/api/layout-dnas")
-async def dnas_list() -> dict[str, Any]:
-    items = []
-    for name, dna in await offload(list_saved_dnas, LAYOUT_DNA_DIR):
-        items.append(
-            {
-                "name": name,
-                "signature": grammar_signature(dna),
-                "guidance": to_guidance(dna),
-            }
-        )
-    return {"dnas": items}
-
-
-@app.post("/api/layout-dnas")
-async def dnas_save(req: SaveDnaRequest) -> dict[str, Any]:
-    dna = extract_layout_dna(req.html)
-    saved = await offload(save_dna, LAYOUT_DNA_DIR, dna)
-    return {"name": saved.stem, "signature": grammar_signature(dna)}
 
 
 # ---- export ----

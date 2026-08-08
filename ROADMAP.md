@@ -61,7 +61,7 @@ Goal: users can safely leave and return to their work.
 - ✅ Add Alembic database migrations and keep runtime schema creation local to SQLite.
 - ✅ Expand the project browser with rename, duplicate, archive, and search.
 - ⬜ Add named checkpoints and duplicate-from-revision.
-- Move templates and Layout DNA into owner-scoped records.
+- ✅ Move templates and Layout DNA into owner-scoped records.
 - ✅ Add first-party authentication and project authorization.
 - Add rate limits and audit events.
 - Unify `/generate`, `/generate-section`, and `/chat` behind one generation orchestrator.

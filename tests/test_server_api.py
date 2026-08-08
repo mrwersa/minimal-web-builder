@@ -3,6 +3,7 @@ from __future__ import annotations
 import pytest
 from fastapi.testclient import TestClient
 
+from server.assets import ReusableAssetService
 from server.auth import AuthService
 from server.database import Database
 from server.main import app
@@ -36,6 +37,7 @@ def client(monkeypatch: pytest.MonkeyPatch, tmp_path):
     app.state.database = database
     app.state.auth = AuthService(database.sessions, session_hours=cfg.session_hours)
     app.state.projects = ProjectService(database.sessions)
+    app.state.assets = ReusableAssetService(database.sessions)
     test_client = TestClient(app)
     response = test_client.post(
         "/api/auth/register",
@@ -173,12 +175,7 @@ def test_export_single_and_split(client: TestClient) -> None:
     assert "color:red" in j["files"]["styles.css"]
 
 
-def test_templates_round_trip(
-    client: TestClient, tmp_path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    import server.main as m
-
-    monkeypatch.setattr(m, "TEMPLATES_DIR", tmp_path)
+def test_templates_round_trip(client: TestClient) -> None:
     r = client.post("/api/templates", json={"name": "my-page", "html": "<html></html>"})
     assert r.status_code == 200
     assert r.json()["saved"] == "my-page"
@@ -192,14 +189,21 @@ def test_templates_round_trip(
     assert client.get("/api/templates").json()["templates"] == []
 
 
-def test_template_load_missing_returns_404(
-    client: TestClient, tmp_path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    import server.main as m
-
-    monkeypatch.setattr(m, "TEMPLATES_DIR", tmp_path)
+def test_template_load_missing_returns_404(client: TestClient) -> None:
     r = client.get("/api/templates/missing")
     assert r.status_code == 404
+
+
+def test_layout_dna_round_trip(client: TestClient) -> None:
+    html = "<body><header>Top</header><main>Body</main><footer>End</footer></body>"
+
+    saved = client.post("/api/layout-dnas", json={"html": html})
+
+    assert saved.status_code == 200
+    assert saved.json()["name"] == "header_main_footer"
+    listed = client.get("/api/layout-dnas")
+    assert listed.status_code == 200
+    assert listed.json()["dnas"][0]["signature"] == "header/main/footer"
 
 
 def test_project_revision_api_round_trip(client: TestClient) -> None:
@@ -320,3 +324,19 @@ def test_project_api_does_not_expose_another_users_project(client: TestClient) -
     assert client.get("/api/projects").json()["projects"] == []
     assert client.get(f"/api/projects/{project['id']}").status_code == 404
     assert client.get(f"/api/pages/{project['pages'][0]['id']}").status_code == 404
+
+
+def test_reusable_assets_are_isolated_between_users(client: TestClient) -> None:
+    client.post(
+        "/api/templates", json={"name": "private", "html": "<main>secret</main>"}
+    )
+    client.post("/api/layout-dnas", json={"html": "<body><header>x</header></body>"})
+    client.post("/api/auth/logout")
+    client.post(
+        "/api/auth/register",
+        json={"email": "second@example.test", "password": "another secure password"},
+    )
+
+    assert client.get("/api/templates").json()["templates"] == []
+    assert client.get("/api/templates/private").status_code == 404
+    assert client.get("/api/layout-dnas").json()["dnas"] == []

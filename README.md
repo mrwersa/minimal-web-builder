@@ -26,7 +26,7 @@ A sleek, minimalist web application builder powered by AI (Gemini / OpenRouter).
 - Safety rails: empty inline scripts are stripped and generated JS is audited for complexity and unsafe calls
 - Visible keyboard focus-state verification in generated templates
 - Export options: single `index.html` or split `index.html` + `styles.css` + `app.js`
-- Template memory: save the current page locally and open it later as a reversible new starting point
+- Private template memory: save the current page to your account and open it later as a reversible new starting point
 - Structured API logging with an opt-in local analytics file
 - Instant preview and code view
 - WYSIWYG editing: select and edit elements on the visual canvas with debounced synchronization and undo/redo
@@ -35,6 +35,7 @@ A sleek, minimalist web application builder powered by AI (Gemini / OpenRouter).
 - Durable projects with automatic SQLite development storage or PostgreSQL via `DATABASE_URL`
 - Immutable page revisions, debounced autosave, optimistic conflict detection, and restore
 - Email/password accounts with Argon2id hashing, opaque server-side sessions, and owner-isolated projects
+- Owner-isolated reusable templates and Layout DNA stored in the application database
 
 
 ## Setup

@@ -6,9 +6,7 @@ from src.layout_dna import (
     extract_layout_dna,
     from_dict,
     grammar_signature,
-    list_saved_dnas,
-    load_dna,
-    save_dna,
+    suggest_dna_name,
     to_dict,
     to_guidance,
 )
@@ -83,47 +81,11 @@ def test_to_dict_from_dict_roundtrip() -> None:
     assert from_dict(to_dict(dna)) == dna
 
 
-def test_save_and_list_dnas_roundtrip(tmp_path) -> None:
+def test_suggest_dna_name_uses_normalized_grammar() -> None:
     dna = LayoutDNA(("header", "hero", "footer"), script_statement_count=2)
 
-    saved = save_dna(tmp_path, dna)
-
-    assert saved.name == "header_hero_footer.json"
-    assert list_saved_dnas(tmp_path) == [("header_hero_footer", dna)]
-
-
-def test_save_dna_creates_unique_name_for_duplicate(tmp_path) -> None:
-    dna = LayoutDNA(("header", "footer"))
-
-    first = save_dna(tmp_path, dna)
-    second = save_dna(tmp_path, dna)
-
-    assert first.name == "header_footer.json"
-    assert second.name == "header_footer-2.json"
-    assert len(list_saved_dnas(tmp_path)) == 2
-
-
-def test_load_dna_returns_saved_layout(tmp_path) -> None:
-    dna = LayoutDNA(("main",))
-    save_dna(tmp_path, dna)
-
-    assert load_dna(tmp_path, "main") == dna
-
-
-def test_load_dna_rejects_unsafe_names(tmp_path) -> None:
-    assert load_dna(tmp_path, "../main") is None
-    assert load_dna(tmp_path, "missing") is None
-
-
-def test_list_saved_dnas_skips_malformed_json(tmp_path) -> None:
-    save_dna(tmp_path, LayoutDNA(("main",)))
-    (tmp_path / "broken.json").write_text("{not json", encoding="utf-8")
-
-    assert [name for name, _ in list_saved_dnas(tmp_path)] == ["main"]
-
-
-def test_list_saved_dnas_on_missing_dir(tmp_path) -> None:
-    assert list_saved_dnas(tmp_path / "does-not-exist") == []
+    assert suggest_dna_name(dna) == "header_hero_footer"
+    assert suggest_dna_name(LayoutDNA(())) == "empty"
 
 
 def test_from_dict_rejects_bad_data() -> None:
