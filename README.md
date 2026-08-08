@@ -36,6 +36,7 @@ A sleek, minimalist web application builder powered by AI (Gemini / OpenRouter).
 - Immutable page revisions, debounced autosave, optimistic conflict detection, and restore
 - Email/password accounts with Argon2id hashing, opaque server-side sessions, and owner-isolated projects
 - Owner-isolated reusable templates and Layout DNA stored in the application database
+- Durable conversation checkpoints and generation-job history shared by every generation path
 
 
 ## Setup
@@ -99,6 +100,7 @@ To edit the generated page directly, turn on **WYSIWYG editing** in the sidebar 
 5. Describe refinements in the chat bar — the agent applies them to the current page.
 6. Export your page as a single HTML file or split into HTML/CSS/JS.
 7. When a project is active, document changes autosave with an expected version so stale browser sessions cannot silently overwrite newer work.
+8. Conversation state and generation outcomes are checkpointed in the database, so a browser or server restart can restore the active thread.
 
 ## Technologies
 

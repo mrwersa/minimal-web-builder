@@ -77,6 +77,7 @@ interface State {
   refreshRevisions: () => Promise<void>;
   restoreRevision: (revisionId: string) => Promise<void>;
   runChat: (message: string) => Promise<void>;
+  restoreConversation: () => Promise<void>;
   clearChat: () => void;
   undo: () => void;
   redo: () => void;
@@ -85,6 +86,18 @@ interface State {
 
 let autosaveTimer: ReturnType<typeof setTimeout> | null = null;
 let projectRequestSequence = 0;
+const THREAD_STORAGE_KEY = "mwb_thread_id";
+
+function newThreadId(): string {
+  const id = crypto.randomUUID();
+  localStorage.setItem(THREAD_STORAGE_KEY, id);
+  return id;
+}
+
+function initialThreadId(): string {
+  const existing = localStorage.getItem(THREAD_STORAGE_KEY);
+  return existing || newThreadId();
+}
 
 function scheduleAutosave(get: () => State, delay = 800) {
   if (!get().activePageId) return;
@@ -147,7 +160,7 @@ export const useStore = create<State>((set, get) => ({
   saveQueued: false,
 
   chatMessages: [],
-  threadId: crypto.randomUUID(),
+  threadId: initialThreadId(),
 
   undoStack: [],
   redoStack: [],
@@ -275,7 +288,7 @@ export const useStore = create<State>((set, get) => ({
       get().setCodeWithHistory(html);
       set({
         chatMessages: [],
-        threadId: crypto.randomUUID(),
+        threadId: newThreadId(),
         notes: [],
         safetyAlerts: [],
         error: null,
@@ -374,7 +387,7 @@ export const useStore = create<State>((set, get) => ({
         undoStack: [],
         redoStack: [],
         chatMessages: [],
-        threadId: crypto.randomUUID(),
+        threadId: newThreadId(),
         notes: [],
         safetyAlerts: [],
         saveState: "saved",
@@ -548,7 +561,22 @@ export const useStore = create<State>((set, get) => ({
     }
   },
 
-  clearChat: () => set({ chatMessages: [], threadId: crypto.randomUUID() }),
+  restoreConversation: async () => {
+    try {
+      const conversation = await api.fetchConversation(get().threadId);
+      if (!conversation) return;
+      set({
+        chatMessages: conversation.messages,
+        code: conversation.current_code,
+        undoStack: [],
+        redoStack: [],
+      });
+    } catch (e) {
+      set({ error: errorMessage(e) });
+    }
+  },
+
+  clearChat: () => set({ chatMessages: [], threadId: newThreadId() }),
 
   undo: () => {
     const { undoStack, code, activePageId, saveState } = get();
@@ -605,6 +633,6 @@ export function resetWorkspace(): void {
   projectRequestSequence += 1;
   useStore.setState({
     ...useStore.getInitialState(),
-    threadId: crypto.randomUUID(),
+    threadId: newThreadId(),
   });
 }

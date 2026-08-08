@@ -18,8 +18,6 @@ from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from server.agent import run_agent
-from server.agent import set_client as set_agent_client
 from server.asset_routes import router as asset_router
 from server.assets import (
     ReusableAssetNotFoundError,
@@ -27,10 +25,12 @@ from server.assets import (
     ReusableAssetValidationError,
 )
 from server.auth import AuthService
+from server.auth_routes import Authenticated
 from server.auth_routes import router as auth_router
 from server.concurrency import offload
 from server.content import DocumentValidationError
 from server.database import Database
+from server.orchestrator import ConversationValidationError, GenerationOrchestrator
 from server.project_routes import router as project_router
 from server.projects import (
     ProjectNotFoundError,
@@ -81,6 +81,8 @@ async def lifespan(app: FastAPI) -> typing.AsyncIterator[None]:
     )
     app.state.projects = ProjectService(app.state.database.sessions)
     app.state.assets = ReusableAssetService(app.state.database.sessions)
+    app.state.orchestrator = GenerationOrchestrator(app.state.database.sessions)
+    app.state.orchestrator.recover_interrupted_jobs()
     try:
         app.state.profiles = load_profiles(PROFILES_DIR)
     except (ValueError, TypeError):
@@ -127,6 +129,7 @@ async def reusable_asset_not_found_handler(
 
 @app.exception_handler(ReusableAssetValidationError)
 @app.exception_handler(DocumentValidationError)
+@app.exception_handler(ConversationValidationError)
 async def content_validation_handler(
     _request: Request, exc: ValueError
 ) -> JSONResponse:
@@ -154,6 +157,10 @@ def _client() -> GenerationClient:
 
 def _profiles():
     return app.state.profiles
+
+
+def _orchestrator() -> GenerationOrchestrator:
+    return app.state.orchestrator
 
 
 def _sanitize_output(raw: str) -> tuple[str, list[str], list[str]]:
@@ -229,7 +236,9 @@ async def options() -> dict[str, Any]:
     }
 
 
-def _effective_settings(req: GenerateRequest | SectionRegenRequest) -> dict[str, Any]:
+def _effective_settings(
+    req: GenerateRequest | SectionRegenRequest | ChatRequest,
+) -> dict[str, Any]:
     profile = get_profile(_profiles(), req.profile) if req.profile else None
     if profile:
         return {
@@ -247,7 +256,7 @@ def _effective_settings(req: GenerateRequest | SectionRegenRequest) -> dict[str,
 
 
 @app.post("/api/generate")
-async def generate_page(req: GenerateRequest) -> JSONResponse:
+async def generate_page(req: GenerateRequest, principal: Authenticated) -> JSONResponse:
     cfg = _client().config
     s = _effective_settings(req)
 
@@ -279,21 +288,19 @@ async def generate_page(req: GenerateRequest) -> JSONResponse:
     if req.layout_dna_guidance:
         extra = f"{extra}\n{req.layout_dna_guidance}".strip()
 
-    raw = await offload(
-        generate,
-        _client(),
-        messages=messages,
-        tone_key=s["tone_key"],
-        strict_minimal=s["strict_minimal"],
-        complexity_key=s["complexity_key"],
-        extra_guidance=extra,
-    )
-    if raw.startswith("API error:"):
-        raise HTTPException(status_code=502, detail=raw)
-
-    sanitized, safety_alerts, notes = _sanitize_output(strip_html_code_fence(raw))
-    return JSONResponse(
-        {
+    def perform() -> dict[str, Any]:
+        raw = generate(
+            _client(),
+            messages=messages,
+            tone_key=s["tone_key"],
+            strict_minimal=s["strict_minimal"],
+            complexity_key=s["complexity_key"],
+            extra_guidance=extra,
+        )
+        if raw.startswith("API error:"):
+            raise HTTPException(status_code=502, detail=raw)
+        sanitized, safety_alerts, notes = _sanitize_output(strip_html_code_fence(raw))
+        return {
             "html": sanitized,
             "safety_alerts": safety_alerts,
             "notes": notes,
@@ -304,7 +311,15 @@ async def generate_page(req: GenerateRequest) -> JSONResponse:
                 "profile": req.profile,
             },
         }
+
+    result = await offload(
+        _orchestrator().execute,
+        principal.id,
+        "generate",
+        req.model_dump(),
+        perform,
     )
+    return JSONResponse(result)
 
 
 class ChatRequest(BaseModel):
@@ -319,7 +334,7 @@ class ChatRequest(BaseModel):
 
 
 @app.post("/api/chat")
-async def chat(req: ChatRequest) -> JSONResponse:
+async def chat(req: ChatRequest, principal: Authenticated) -> JSONResponse:
     """Conversational agent endpoint powered by LangGraph.
 
     Maintains conversation memory per ``thread_id`` across turns. The agent
@@ -333,64 +348,43 @@ async def chat(req: ChatRequest) -> JSONResponse:
     if err:
         raise HTTPException(status_code=400, detail=err)
 
-    # Wire the agent's LLM client to the app's configured client
-    set_agent_client(_client())
-
-    # Resolve effective settings (profile overrides)
-    profile = get_profile(_profiles(), req.profile) if req.profile else None
-    if profile:
-        settings = {
-            "tone": profile.tone_key,
-            "complexity": profile.complexity_key,
-            "strict_minimal": profile.strict_minimal,
-            "extra_guidance": profile.extra_guidance,
-        }
-    else:
-        settings = {
-            "tone": req.tone,
-            "complexity": req.complexity,
-            "strict_minimal": req.strict_minimal,
-            "extra_guidance": "",
-        }
+    effective = _effective_settings(req)
+    settings = {
+        "tone": effective["tone_key"],
+        "complexity": effective["complexity_key"],
+        "strict_minimal": effective["strict_minimal"],
+        "extra_guidance": effective["extra_guidance"],
+    }
     if req.layout_dna_guidance:
         settings["extra_guidance"] = (
             f"{settings.get('extra_guidance', '')}\n{req.layout_dna_guidance}".strip()
         )
 
     result = await offload(
-        run_agent,
+        _orchestrator().chat,
+        principal.id,
+        req.thread_id,
         validated,
-        thread_id=req.thread_id,
-        current_code=req.current_code,
-        settings=settings,
+        req.current_code,
+        settings,
+        _client(),
     )
+    return JSONResponse(result)
 
-    # Extract the assistant's response message (handle both dicts and langchain msgs)
-    messages = result.get("messages", [])
-    assistant_msg = {"role": "assistant", "content": "Done."}
-    for m in reversed(messages):
-        role = (
-            getattr(m, "type", None) or m.get("role")
-            if isinstance(m, dict)
-            else getattr(m, "type", None)
-        )
-        content = (
-            getattr(m, "content", None) if not isinstance(m, dict) else m.get("content")
-        )
-        if role in ("assistant", "ai"):
-            assistant_msg = {"role": "assistant", "content": content or ""}
-            break
 
-    return JSONResponse(
-        {
-            "html": result.get("current_code"),
-            "message": assistant_msg.get("content", ""),
-            "intent": result.get("intent"),
-            "validation_errors": result.get("validation_errors", []),
-            "validation_notes": result.get("validation_notes", []),
-            "error": result.get("error"),
-        }
+@app.get("/api/conversations/{thread_id}")
+async def conversation_get(thread_id: str, principal: Authenticated) -> dict[str, Any]:
+    conversation = await offload(
+        _orchestrator().get_conversation, principal.id, thread_id
     )
+    if conversation is None:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+    return conversation
+
+
+@app.get("/api/generation-jobs")
+async def generation_jobs(principal: Authenticated) -> dict[str, Any]:
+    return {"jobs": await offload(_orchestrator().list_jobs, principal.id)}
 
 
 class SectionsRequest(BaseModel):
@@ -408,7 +402,9 @@ async def list_sections(req: SectionsRequest) -> dict[str, Any]:
 
 
 @app.post("/api/generate-section")
-async def generate_section(req: SectionRegenRequest) -> JSONResponse:
+async def generate_section(
+    req: SectionRegenRequest, principal: Authenticated
+) -> JSONResponse:
     s = _effective_settings(req)
     sections = extract_sections(req.code)
     if req.section_index < 0 or req.section_index >= len(sections):
@@ -419,35 +415,40 @@ async def generate_section(req: SectionRegenRequest) -> JSONResponse:
     if req.layout_dna_guidance:
         extra = f"{extra}\n{req.layout_dna_guidance}".strip()
 
-    raw = await offload(
-        regenerate_section,
-        _client(),
-        current_code=req.code,
-        section=section,
-        instructions=req.instructions,
-        tone_key=s["tone_key"],
-        strict_minimal=s["strict_minimal"],
-        complexity_key=s["complexity_key"],
-        extra_guidance=extra,
-        refine_aspect_key=req.refine_aspect,
-    )
-    if raw.startswith("API error:"):
-        raise HTTPException(status_code=502, detail=raw)
-
-    sanitized, safety_alerts, notes = _sanitize_output(raw)
-    replacement = extract_first_top_level(strip_html_code_fence(sanitized))
-    if not replacement:
-        raise HTTPException(
-            status_code=422, detail="Could not parse regenerated section"
+    def perform() -> dict[str, Any]:
+        raw = regenerate_section(
+            _client(),
+            current_code=req.code,
+            section=section,
+            instructions=req.instructions,
+            tone_key=s["tone_key"],
+            strict_minimal=s["strict_minimal"],
+            complexity_key=s["complexity_key"],
+            extra_guidance=extra,
+            refine_aspect_key=req.refine_aspect,
         )
-    updated = replace_section(req.code, section, replacement)
-    return JSONResponse(
-        {
-            "html": updated,
+        if raw.startswith("API error:"):
+            raise HTTPException(status_code=502, detail=raw)
+        sanitized, safety_alerts, notes = _sanitize_output(raw)
+        replacement = extract_first_top_level(strip_html_code_fence(sanitized))
+        if not replacement:
+            raise HTTPException(
+                status_code=422, detail="Could not parse regenerated section"
+            )
+        return {
+            "html": replace_section(req.code, section, replacement),
             "safety_alerts": safety_alerts,
             "notes": notes,
         }
+
+    result = await offload(
+        _orchestrator().execute,
+        principal.id,
+        "generate_section",
+        req.model_dump(),
+        perform,
     )
+    return JSONResponse(result)
 
 
 # ---- export ----

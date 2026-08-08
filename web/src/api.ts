@@ -349,6 +349,20 @@ export interface ChatResponse {
   error: string | null;
 }
 
+export interface ConversationSnapshot {
+  thread_id: string;
+  messages: ChatMessage[];
+  current_code: string | null;
+}
+
+export async function fetchConversation(
+  threadId: string,
+): Promise<ConversationSnapshot | null> {
+  const response = await fetch(`/api/conversations/${encodeURIComponent(threadId)}`);
+  if (response.status === 404) return null;
+  return readJson(response, "Unable to restore conversation");
+}
+
 export async function chat(req: {
   message: string;
   thread_id: string;

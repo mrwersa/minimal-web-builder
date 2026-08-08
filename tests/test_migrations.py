@@ -22,6 +22,8 @@ def test_initial_migration_builds_service_schema(tmp_path, monkeypatch) -> None:
     engine = create_database_engine(database_url)
     assert set(inspect(engine).get_table_names()) == {
         "alembic_version",
+        "conversations",
+        "generation_jobs",
         "layout_dnas",
         "pages",
         "projects",

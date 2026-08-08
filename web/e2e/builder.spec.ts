@@ -8,6 +8,9 @@ test("generate, edit, undo, and export the page", async ({ page }) => {
   await page.route("**/api/auth/me", (route) =>
     route.fulfill({ json: { id: "user-1", email: "owner@example.test" } }),
   );
+  await page.route("**/api/conversations/**", (route) =>
+    route.fulfill({ status: 404, json: { detail: "Conversation not found" } }),
+  );
   await page.route("**/api/options", (route) =>
     route.fulfill({
       json: {
