@@ -11,6 +11,7 @@ import { Button } from "./ui/Button";
 import { Input } from "./ui/Input";
 import { Separator } from "./ui/Separator";
 import ProjectPanel from "./ProjectPanel";
+import { InlineError } from "./ui/InlineError";
 
 const COL_LABEL = "mb-1 block text-[11px] font-semibold uppercase tracking-wider text-muted2";
 
@@ -39,8 +40,12 @@ export default function Sidebar() {
 
   if (!opts) {
     return (
-      <aside className="flex h-full w-80 items-center justify-center border-r border-border2 bg-surface">
-        <Spinner size="md" />
+      <aside className="flex h-full w-80 items-center justify-center border-r border-border2 bg-surface p-4">
+        {s.optionsError ? (
+          <InlineError message={s.optionsError} onRetry={() => s.loadOptions()} />
+        ) : (
+          <Spinner size="md" />
+        )}
       </aside>
     );
   }
@@ -138,6 +143,12 @@ export default function Sidebar() {
             <p className="text-xs text-muted2">Generate a page first to refine it.</p>
           ) : (
             <div className="space-y-3">
+              {s.sectionsError && (
+                <InlineError
+                  message={s.sectionsError}
+                  onRetry={() => s.refreshSections()}
+                />
+              )}
               <div className="flex items-center gap-2">
                 <Switch checked={s.editing} onChange={(v) => s.set("editing", v)} disabled={s.busy} id="wys" />
                 <label htmlFor="wys" className="flex items-center gap-1.5 text-sm">
@@ -167,6 +178,9 @@ export default function Sidebar() {
             <p className="text-xs text-muted2">Generate a page to inspect its layout DNA.</p>
           ) : (
             <div className="space-y-2">
+              {s.dnasError && (
+                <InlineError message={s.dnasError} onRetry={() => s.refreshDnas()} />
+              )}
               <Button variant="outline" className="w-full" onClick={() => s.doSaveDna()}>
                 <Save className="h-3.5 w-3.5" /> Save current layout
               </Button>
@@ -194,6 +208,12 @@ export default function Sidebar() {
             <p className="text-xs text-muted2">Generate a page to save it as a template.</p>
           ) : (
             <div className="space-y-2">
+              {s.templatesError && (
+                <InlineError
+                  message={s.templatesError}
+                  onRetry={() => s.refreshTemplates()}
+                />
+              )}
               <div className="flex gap-2">
                 <Input value={s.templateName} onChange={(e) => s.set("templateName", e.target.value)} placeholder="template name" className="flex-1" />
                 <Button variant="outline" onClick={() => s.doSaveTemplate()}>Save</Button>

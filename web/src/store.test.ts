@@ -74,12 +74,16 @@ describe("document revision workflows", () => {
       constraintColor: "single-accent",
       constraintDensity: "balanced",
       projects: [],
+      projectsError: null,
       projectName: "",
       projectSearch: "",
       activeProjectId: null,
       activePageId: null,
       activePageVersion: 0,
       revisions: [],
+      sectionsError: null,
+      templatesError: null,
+      dnasError: null,
       saveState: "idle",
       saveQueued: false,
     });
@@ -252,5 +256,45 @@ describe("document revision workflows", () => {
     expect(api.archiveProject).toHaveBeenCalledWith("project-1");
     expect(useStore.getState().activeProjectId).toBeNull();
     expect(useStore.getState().activePageId).toBeNull();
+  });
+
+  it("surfaces and clears sidebar resource load errors", async () => {
+    useStore.setState({ code: "<main>Page</main>" });
+    vi.mocked(api.fetchSections).mockRejectedValueOnce(new Error("Sections unavailable"));
+    vi.mocked(api.fetchTemplates).mockRejectedValueOnce(new Error("Templates unavailable"));
+    vi.mocked(api.fetchDnas).mockRejectedValueOnce(new Error("DNA unavailable"));
+    vi.mocked(api.fetchProjects).mockRejectedValueOnce(new Error("Projects unavailable"));
+
+    await Promise.all([
+      useStore.getState().refreshSections(),
+      useStore.getState().refreshTemplates(),
+      useStore.getState().refreshDnas(),
+      useStore.getState().refreshProjects(),
+    ]);
+
+    expect(useStore.getState()).toMatchObject({
+      sectionsError: "Sections unavailable",
+      templatesError: "Templates unavailable",
+      dnasError: "DNA unavailable",
+      projectsError: "Projects unavailable",
+    });
+
+    vi.mocked(api.fetchSections).mockResolvedValue([]);
+    vi.mocked(api.fetchTemplates).mockResolvedValue([]);
+    vi.mocked(api.fetchDnas).mockResolvedValue([]);
+    vi.mocked(api.fetchProjects).mockResolvedValue([]);
+    await Promise.all([
+      useStore.getState().refreshSections(),
+      useStore.getState().refreshTemplates(),
+      useStore.getState().refreshDnas(),
+      useStore.getState().refreshProjects(),
+    ]);
+
+    expect(useStore.getState()).toMatchObject({
+      sectionsError: null,
+      templatesError: null,
+      dnasError: null,
+      projectsError: null,
+    });
   });
 });

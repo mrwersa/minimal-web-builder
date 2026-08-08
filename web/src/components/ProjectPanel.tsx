@@ -13,6 +13,7 @@ import { useStore } from "../store";
 import { cn } from "../lib/utils";
 import { Button } from "./ui/Button";
 import { Input } from "./ui/Input";
+import { InlineError } from "./ui/InlineError";
 
 export default function ProjectPanel() {
   const s = useStore();
@@ -52,6 +53,9 @@ export default function ProjectPanel() {
 
   return (
     <div className="space-y-2">
+      {s.projectsError && (
+        <InlineError message={s.projectsError} onRetry={() => s.refreshProjects()} />
+      )}
       <div className="flex gap-2">
         <Input
           value={s.projectName}
