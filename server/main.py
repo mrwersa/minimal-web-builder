@@ -27,7 +27,7 @@ from server.assets import (
 from server.auth import AuthService
 from server.auth_routes import Authenticated
 from server.auth_routes import router as auth_router
-from server.concurrency import GenerationLimiter, offload
+from server.concurrency import offload
 from server.content import DocumentValidationError, validate_document
 from server.control_routes import router as control_router
 from server.controls import IdempotencyConflictError, RequestControlService
@@ -35,7 +35,12 @@ from server.database import Database
 from server.documents import EDITOR_NODE_ID_PATTERN, EditorDocumentValidationError
 from server.editor_scope import find_editor_element
 from server.mutations import run_idempotent
-from server.orchestrator import ConversationValidationError, GenerationOrchestrator
+from server.orchestrator import (
+    CancellationToken,
+    ConversationValidationError,
+    GenerationOrchestrator,
+    JobNotFoundError,
+)
 from server.project_routes import router as project_router
 from server.projects import (
     ProjectNotFoundError,
@@ -86,11 +91,11 @@ async def lifespan(app: FastAPI) -> typing.AsyncIterator[None]:
     )
     app.state.projects = ProjectService(app.state.database.sessions)
     app.state.assets = ReusableAssetService(app.state.database.sessions)
-    app.state.orchestrator = GenerationOrchestrator(app.state.database.sessions)
-    app.state.controls = RequestControlService(app.state.database.sessions)
-    app.state.generation_limiter = GenerationLimiter(
-        app.state.client.config.generation_max_concurrency
+    app.state.orchestrator = GenerationOrchestrator(
+        app.state.database.sessions,
+        max_workers=app.state.client.config.generation_max_concurrency,
     )
+    app.state.controls = RequestControlService(app.state.database.sessions)
     app.state.controls.recover_stale_records()
     app.state.orchestrator.recover_interrupted_jobs()
     try:
@@ -100,6 +105,7 @@ async def lifespan(app: FastAPI) -> typing.AsyncIterator[None]:
     try:
         yield
     finally:
+        app.state.orchestrator.shutdown()
         app.state.database.close()
 
 
@@ -116,6 +122,13 @@ app.include_router(asset_router)
 app.include_router(project_router)
 app.include_router(control_router)
 app.middleware("http")(enforce_request_controls)
+
+
+@app.exception_handler(JobNotFoundError)
+async def job_not_found_handler(
+    _request: Request, exc: JobNotFoundError
+) -> JSONResponse:
+    return JSONResponse(status_code=404, content={"detail": str(exc)})
 
 
 @app.exception_handler(ProjectNotFoundError)
@@ -181,10 +194,6 @@ def _profiles():
 
 def _orchestrator() -> GenerationOrchestrator:
     return app.state.orchestrator
-
-
-def _generation_limiter() -> GenerationLimiter:
-    return app.state.generation_limiter
 
 
 def _sanitize_output(raw: str) -> tuple[str, list[str], list[str]]:
@@ -315,7 +324,7 @@ async def generate_page(
     if req.layout_dna_guidance:
         extra = f"{extra}\n{req.layout_dna_guidance}".strip()
 
-    def perform() -> dict[str, Any]:
+    def perform(token: CancellationToken) -> dict[str, Any]:
         raw = generate(
             _client(),
             messages=messages,
@@ -327,6 +336,7 @@ async def generate_page(
         if raw.startswith("API error:"):
             raise HTTPException(status_code=502, detail=raw)
         sanitized, safety_alerts, notes = _sanitize_output(strip_html_code_fence(raw))
+        token.raise_if_cancelled()
         if req.thread_id:
             _orchestrator().checkpoint_document(
                 principal.id,
@@ -347,18 +357,19 @@ async def generate_page(
             },
         }
 
-    result = await _generation_limiter().run(
-        lambda: run_idempotent(
-            request,
-            principal,
-            "generation.generate",
-            req.model_dump(),
-            lambda: _orchestrator().execute(
+    result = await run_idempotent(
+        request,
+        principal,
+        "generation.generate",
+        req.model_dump(),
+        lambda: {
+            "job_id": _orchestrator().submit(
                 principal.id, "generate", req.model_dump(), perform
             ),
-        )
+            "status": "queued",
+        },
     )
-    return JSONResponse(result)
+    return JSONResponse(result, status_code=202)
 
 
 class ChatRequest(BaseModel):
@@ -410,13 +421,13 @@ async def chat(
             f"{settings.get('extra_guidance', '')}\n{req.layout_dna_guidance}".strip()
         )
 
-    result = await _generation_limiter().run(
-        lambda: run_idempotent(
-            request,
-            principal,
-            "generation.chat",
-            req.model_dump(),
-            lambda: _orchestrator().chat(
+    result = await run_idempotent(
+        request,
+        principal,
+        "generation.chat",
+        req.model_dump(),
+        lambda: {
+            "job_id": _orchestrator().submit_chat(
                 principal.id,
                 req.thread_id,
                 validated,
@@ -425,9 +436,10 @@ async def chat(
                 _client(),
                 req.target_node_id,
             ),
-        )
+            "status": "queued",
+        },
     )
-    return JSONResponse(result)
+    return JSONResponse(result, status_code=202)
 
 
 @app.get("/api/conversations/{thread_id}")
@@ -448,6 +460,27 @@ async def generation_jobs(principal: Authenticated) -> dict[str, Any]:
 @app.get("/api/generation-jobs/stats")
 async def generation_job_stats(principal: Authenticated) -> dict[str, Any]:
     return await offload(_orchestrator().job_stats, principal.id)
+
+
+@app.get("/api/generation-jobs/active")
+async def generation_job_active(principal: Authenticated) -> dict[str, Any]:
+    """The job a reloaded browser should reattach to, if any."""
+    return {"job": await offload(_orchestrator().active_job, principal.id)}
+
+
+@app.get("/api/generation-jobs/{job_id}")
+async def generation_job(job_id: str, principal: Authenticated) -> dict[str, Any]:
+    job = await offload(_orchestrator().get_job, principal.id, job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail="Generation job not found")
+    return job
+
+
+@app.post("/api/generation-jobs/{job_id}/cancel")
+async def generation_job_cancel(
+    job_id: str, principal: Authenticated
+) -> dict[str, Any]:
+    return await offload(_orchestrator().request_cancel, principal.id, job_id)
 
 
 class SectionsRequest(BaseModel):
@@ -502,7 +535,7 @@ async def generate_section(
     if req.layout_dna_guidance:
         extra = f"{extra}\n{req.layout_dna_guidance}".strip()
 
-    def perform() -> dict[str, Any]:
+    def perform(token: CancellationToken) -> dict[str, Any]:
         raw = regenerate_section(
             _client(),
             current_code=req.code,
@@ -523,6 +556,7 @@ async def generate_section(
                 status_code=422, detail="Could not parse regenerated section"
             )
         updated = replace_section(req.code, section, replacement)
+        token.raise_if_cancelled()
         if req.thread_id:
             _orchestrator().checkpoint_document(
                 principal.id,
@@ -537,18 +571,19 @@ async def generate_section(
             "notes": notes,
         }
 
-    result = await _generation_limiter().run(
-        lambda: run_idempotent(
-            request,
-            principal,
-            "generation.generate_section",
-            req.model_dump(),
-            lambda: _orchestrator().execute(
+    result = await run_idempotent(
+        request,
+        principal,
+        "generation.generate_section",
+        req.model_dump(),
+        lambda: {
+            "job_id": _orchestrator().submit(
                 principal.id, "generate_section", req.model_dump(), perform
             ),
-        )
+            "status": "queued",
+        },
     )
-    return JSONResponse(result)
+    return JSONResponse(result, status_code=202)
 
 
 # ---- export ----

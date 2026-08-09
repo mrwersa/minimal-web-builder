@@ -99,11 +99,15 @@ Exit metrics:
 Goal: generation is observable, cancellable, measurable, and structurally safe.
 
 - ⬜ Replace full-document rewrites with typed insert/update/move/delete patches.
-- ⬜ Stream job progress and support cancellation, retry, and recovery after navigation.
+- 🔄 Stream job progress and support cancellation, retry, and recovery after navigation.
+  Generation runs on durable background workers; clients submit a job, poll it,
+  can cancel it, and reattach to one still running after a reload. Incremental
+  progress streaming remains.
 - 🔄 Add durable workers, provider timeouts, fallback policy, and concurrency limits.
-  Provider timeouts and concurrency limits are configurable and enforced, and
-  transient provider failures retry with exponential backoff while permanent ones
-  fail fast. Durable workers and model-level fallback remain.
+  Generations run on a bounded worker pool, provider timeouts and concurrency
+  limits are configurable and enforced, and transient provider failures retry
+  with exponential backoff while permanent ones fail fast. Model-level fallback
+  remains.
 - ⬜ Add visual-quality, responsiveness, accessibility, and instruction-following fixtures.
 - ⬜ Add screenshot and visual-regression checks for representative pages.
 - 🔄 Track latency, token usage, cost, acceptance, undo-after-generation, and failures.

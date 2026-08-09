@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import threading
+import time
+
 import pytest
 from fastapi import HTTPException
 from sqlalchemy import select
@@ -12,7 +15,9 @@ from server.orchestrator import (
     FAILURE_PROVIDER,
     FAILURE_TIMEOUT,
     FAILURE_VALIDATION,
+    TERMINAL_STATUSES,
     GenerationOrchestrator,
+    JobNotFoundError,
     _percentile,
     classify_failure,
 )
@@ -45,23 +50,37 @@ def orchestrator(tmp_path):
         database.close()
 
 
-def test_execute_persists_success_and_failure(orchestrator) -> None:
+def wait_for_job(service, job_id: str, timeout: float = 10.0) -> dict:
+    """Block until a submitted job reaches a terminal state."""
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        job = service.get_job(OWNER_ID, job_id)
+        if job is not None and job["status"] in TERMINAL_STATUSES:
+            return job
+        time.sleep(0.01)
+    raise AssertionError(f"job {job_id} never settled")
+
+
+def run_job(service, work, operation: str = "generate") -> dict:
+    return wait_for_job(service, service.submit(OWNER_ID, operation, {}, work))
+
+
+def test_submit_persists_success_and_failure(orchestrator) -> None:
     service, _database = orchestrator
 
-    result = service.execute(
-        OWNER_ID, "generate", {"prompt": "x"}, lambda: {"html": "ok"}
-    )
-    assert result == {"html": "ok"}
+    succeeded = run_job(service, lambda _token: {"html": "ok"})
+    assert succeeded["status"] == "succeeded"
+    assert succeeded["result"] == {"html": "ok"}
 
-    def fail():
+    def fail(_token):
         raise RuntimeError("provider unavailable")
 
-    with pytest.raises(RuntimeError, match="provider unavailable"):
-        service.execute(OWNER_ID, "generate", {"prompt": "x"}, fail)
+    failed = run_job(service, fail)
+    assert failed["status"] == "failed"
+    assert failed["error"] == "provider unavailable"
 
     jobs = service.list_jobs(OWNER_ID)
     assert [job["status"] for job in jobs] == ["failed", "succeeded"]
-    assert jobs[0]["error"] == "provider unavailable"
 
 
 def test_recover_interrupted_jobs(orchestrator) -> None:
@@ -107,17 +126,20 @@ def test_chat_passes_scoped_target_to_agent_and_job(
     monkeypatch.setattr("server.orchestrator.run_agent", fake_run_agent)
     html = '<main data-mwb-id="target">Old</main>'
 
-    result = service.chat(
-        OWNER_ID,
-        "scoped-thread",
-        "make it warmer",
-        html,
-        {},
-        None,  # type: ignore[arg-type]
-        "target",
+    job = wait_for_job(
+        service,
+        service.submit_chat(
+            OWNER_ID,
+            "scoped-thread",
+            "make it warmer",
+            html,
+            {},
+            None,  # type: ignore[arg-type]
+            "target",
+        ),
     )
 
-    assert result["intent"] == "refine"
+    assert job["result"]["intent"] == "refine"
     assert captured["target_node_id"] == "target"
     with database.sessions() as session:
         job = session.scalar(
@@ -177,14 +199,12 @@ def test_percentile_uses_nearest_rank(
     assert _percentile(values, percentile) == expected
 
 
-def test_execute_records_duration_and_result_metrics(orchestrator) -> None:
+def test_submit_records_duration_and_result_metrics(orchestrator) -> None:
     service, database = orchestrator
 
-    service.execute(
-        OWNER_ID,
-        "generate",
-        {"prompt": "x"},
-        lambda: {
+    run_job(
+        service,
+        lambda _token: {
             "html": "<html>page</html>",
             "notes": ["a", "b"],
             "safety_alerts": ["stripped a script"],
@@ -206,14 +226,13 @@ def test_execute_records_duration_and_result_metrics(orchestrator) -> None:
         }
 
 
-def test_execute_classifies_and_times_failures(orchestrator) -> None:
+def test_submit_classifies_and_times_failures(orchestrator) -> None:
     service, database = orchestrator
 
-    def fail():
+    def fail(_token):
         raise HTTPException(status_code=502, detail="API error: upstream refused")
 
-    with pytest.raises(HTTPException):
-        service.execute(OWNER_ID, "generate", {"prompt": "x"}, fail)
+    run_job(service, fail)
 
     with database.sessions() as session:
         job = session.scalar(select(GenerationJobRecord))
@@ -228,7 +247,7 @@ def test_execute_classifies_and_times_failures(orchestrator) -> None:
 
 def test_list_jobs_exposes_metrics(orchestrator) -> None:
     service, _database = orchestrator
-    service.execute(OWNER_ID, "generate", {}, lambda: {"html": "ok"})
+    run_job(service, lambda _token: {"html": "ok"})
 
     job = service.list_jobs(OWNER_ID)[0]
 
@@ -327,3 +346,143 @@ def test_job_stats_is_scoped_to_the_owner(orchestrator) -> None:
 
     assert stats["totals"]["total"] == 1
     assert stats["failure_kinds"] == {}
+
+
+def test_cancel_discards_a_result_that_arrives_after_the_client_gave_up(
+    orchestrator,
+) -> None:
+    """A provider call cannot be interrupted, so the result is dropped instead."""
+    service, _database = orchestrator
+    started = threading.Event()
+    release = threading.Event()
+
+    def slow(_token):
+        started.set()
+        release.wait(timeout=5)
+        return {"html": "<main>too late</main>"}
+
+    job_id = service.submit(OWNER_ID, "generate", {}, slow)
+    assert started.wait(timeout=5)
+
+    service.request_cancel(OWNER_ID, job_id)
+    release.set()
+
+    job = wait_for_job(service, job_id)
+    assert job["status"] == "cancelled"
+    assert job["result"] is None
+
+
+def test_cancelling_a_queued_job_settles_it_without_running_it(orchestrator) -> None:
+    """The pool is full, so this job must never reach the provider at all."""
+    _service, database = orchestrator
+    # A single worker makes "still queued" deterministic rather than a race.
+    service = GenerationOrchestrator(database.sessions, max_workers=1)
+    release = threading.Event()
+    ran = threading.Event()
+
+    def block(_token):
+        release.wait(timeout=5)
+        return {"html": "first"}
+
+    def should_not_run(_token):
+        ran.set()
+        return {"html": "second"}
+
+    first = service.submit(OWNER_ID, "generate", {}, block)
+    queued = service.submit(OWNER_ID, "generate", {}, should_not_run)
+
+    cancelled = service.request_cancel(OWNER_ID, queued)
+    assert cancelled["status"] == "cancelled"
+
+    release.set()
+    wait_for_job(service, first)
+    assert wait_for_job(service, queued)["status"] == "cancelled"
+    assert not ran.is_set()
+    service.shutdown()
+
+
+def test_work_can_abandon_itself_at_a_cancellation_checkpoint(orchestrator) -> None:
+    service, _database = orchestrator
+    committed = threading.Event()
+    job_id: dict[str, str] = {}
+
+    def work(token):
+        # Simulate a cancel landing while the provider was responding.
+        service.request_cancel(OWNER_ID, job_id["id"])
+        token.raise_if_cancelled()
+        committed.set()
+        return {"html": "never"}
+
+    job_id["id"] = service.submit(OWNER_ID, "generate", {}, work)
+
+    job = wait_for_job(service, job_id["id"])
+    assert job["status"] == "cancelled"
+    assert not committed.is_set()
+
+
+def test_cancelling_a_finished_job_is_a_no_op(orchestrator) -> None:
+    service, _database = orchestrator
+    job_id = service.submit(OWNER_ID, "generate", {}, lambda _token: {"html": "ok"})
+    wait_for_job(service, job_id)
+
+    assert service.request_cancel(OWNER_ID, job_id)["status"] == "succeeded"
+
+
+def test_cancel_rejects_another_owners_job(orchestrator) -> None:
+    service, _database = orchestrator
+    job_id = service.submit(OWNER_ID, "generate", {}, lambda _token: {"html": "ok"})
+    wait_for_job(service, job_id)
+
+    with pytest.raises(JobNotFoundError):
+        service.request_cancel(OTHER_OWNER_ID, job_id)
+    assert service.get_job(OTHER_OWNER_ID, job_id) is None
+
+
+def test_active_job_is_what_a_reloaded_browser_reattaches_to(orchestrator) -> None:
+    service, _database = orchestrator
+    assert service.active_job(OWNER_ID) is None
+
+    release = threading.Event()
+    job_id = service.submit(
+        OWNER_ID,
+        "generate",
+        {},
+        lambda _token: release.wait(timeout=5) or {"html": "x"},
+    )
+
+    active = service.active_job(OWNER_ID)
+    assert active is not None and active["id"] == job_id
+
+    release.set()
+    wait_for_job(service, job_id)
+    assert service.active_job(OWNER_ID) is None
+
+
+def test_recovery_settles_queued_jobs_a_restart_orphaned(orchestrator) -> None:
+    """A queued job's worker never existed, so nothing would ever pick it up."""
+    service, database = orchestrator
+    with database.sessions.begin() as session:
+        session.add(
+            GenerationJobRecord(
+                owner_id=OWNER_ID, operation="chat", status="queued", request={}
+            )
+        )
+
+    assert service.recover_interrupted_jobs() == 1
+    with database.sessions() as session:
+        job = session.scalar(select(GenerationJobRecord))
+        assert job is not None
+        assert job.status == "failed"
+        assert job.failure_kind == FAILURE_INTERRUPTED
+
+
+def test_cancelled_jobs_stay_out_of_the_success_rate(orchestrator) -> None:
+    service, database = orchestrator
+    _seed_job(database, OWNER_ID, duration_ms=10)
+    _seed_job(database, OWNER_ID, status="cancelled")
+
+    totals = service.job_stats(OWNER_ID)["totals"]
+
+    assert totals["cancelled"] == 1
+    # One success, no failures: a user changing their mind is not a defect.
+    assert totals["success_rate"] == 1.0

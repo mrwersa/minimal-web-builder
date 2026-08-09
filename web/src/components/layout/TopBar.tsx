@@ -11,6 +11,7 @@ import {
   Sun,
   Tablet,
   Undo2,
+  X,
   ZoomIn,
   ZoomOut,
 } from "lucide-react";
@@ -93,6 +94,8 @@ export default function TopBar({
   const viewport = useStore((state) => state.viewport);
   const zoom = useStore((state) => state.zoom);
   const saveState = useStore((state) => state.saveState);
+  const activeJobId = useStore((state) => state.activeJobId);
+  const cancelGeneration = useStore((state) => state.cancelGeneration);
   const setStore = useStore((state) => state.set);
   const { preference, resolved, setPreference } = useTheme();
 
@@ -204,6 +207,16 @@ export default function TopBar({
             </TabsTrigger>
           </TabsList>
         </Tabs>
+
+        {busy && activeJobId && (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => void cancelGeneration()}
+          >
+            <X /> Stop
+          </Button>
+        )}
 
         <Badge variant={status.variant}>
           <span

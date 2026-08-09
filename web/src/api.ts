@@ -142,6 +142,90 @@ export async function logout(): Promise<void> {
   if (!response.ok) throw new Error("Unable to sign out");
 }
 
+export type JobStatus = "queued" | "running" | "succeeded" | "failed" | "cancelled";
+
+export interface JobSnapshot {
+  id: string;
+  operation: string;
+  status: JobStatus;
+  result: unknown;
+  error: string | null;
+  failure_kind: string | null;
+  duration_ms: number | null;
+  metrics: Record<string, number> | null;
+  cancel_requested: boolean;
+}
+
+/** Thrown when a job ends because the user asked it to stop, not because it broke. */
+export class GenerationCancelledError extends Error {
+  constructor() {
+    super("Generation cancelled");
+    this.name = "GenerationCancelledError";
+  }
+}
+
+const JOB_POLL_INTERVAL_MS = 600;
+
+export async function fetchJob(jobId: string): Promise<JobSnapshot> {
+  return requestJson(
+    `/api/generation-jobs/${encodeURIComponent(jobId)}`,
+    undefined,
+    "Unable to read generation status",
+  );
+}
+
+export async function cancelJob(jobId: string): Promise<JobSnapshot> {
+  return requestJson(
+    `/api/generation-jobs/${encodeURIComponent(jobId)}/cancel`,
+    jsonRequest("POST", {}),
+    "Unable to cancel generation",
+  );
+}
+
+export async function fetchActiveJob(): Promise<JobSnapshot | null> {
+  const result = await requestJson<{ job: JobSnapshot | null }>(
+    "/api/generation-jobs/active",
+    undefined,
+    "Unable to check for running generations",
+  );
+  return result.job;
+}
+
+/**
+ * Poll a submitted job until it settles.
+ *
+ * Generation runs on the server's worker pool, so the browser is no longer
+ * holding the request open — which is what lets a reload reattach to work that
+ * is still running.
+ */
+export async function awaitJob<T>(
+  jobId: string,
+  failureMessage: string,
+): Promise<T> {
+  for (;;) {
+    const job = await fetchJob(jobId);
+    if (job.status === "succeeded") return job.result as T;
+    if (job.status === "cancelled") throw new GenerationCancelledError();
+    if (job.status === "failed") throw new Error(job.error || failureMessage);
+    await new Promise((resolve) => setTimeout(resolve, JOB_POLL_INTERVAL_MS));
+  }
+}
+
+async function submitJob(
+  path: string,
+  body: unknown,
+  failureMessage: string,
+  onJob?: (jobId: string) => void,
+): Promise<string> {
+  const { job_id: jobId } = await requestJson<{ job_id: string }>(
+    path,
+    jsonRequest("POST", body),
+    failureMessage,
+  );
+  onJob?.(jobId);
+  return jobId;
+}
+
 export async function fetchOptions(): Promise<OptionsResponse> {
   return requestJson("/api/options", undefined, "Unable to load options");
 }
@@ -156,12 +240,9 @@ export async function generate(req: {
   layout_dna_guidance: string;
   constraints?: { sections: string[]; color_limit: string; density: string };
   thread_id: string;
-}): Promise<GenerateResponse> {
-  return requestJson(
-    "/api/generate",
-    jsonRequest("POST", req),
-    "Generation failed",
-  );
+}, onJob?: (jobId: string) => void): Promise<GenerateResponse> {
+  const jobId = await submitJob("/api/generate", req, "Generation failed", onJob);
+  return awaitJob<GenerateResponse>(jobId, "Generation failed");
 }
 
 export async function fetchSections(code: string): Promise<SectionInfo[]> {
@@ -184,12 +265,18 @@ export async function regenerateSection(req: {
   layout_dna_guidance: string;
   refine_aspect: string | null;
   thread_id: string;
-}): Promise<{ html: string; safety_alerts: string[]; notes: string[] }> {
-  return requestJson(
+}, onJob?: (jobId: string) => void): Promise<{
+  html: string;
+  safety_alerts: string[];
+  notes: string[];
+}> {
+  const jobId = await submitJob(
     "/api/generate-section",
-    jsonRequest("POST", req),
+    req,
     "Section regeneration failed",
+    onJob,
   );
+  return awaitJob(jobId, "Section regeneration failed");
 }
 
 export async function fetchTemplates(): Promise<string[]> {
@@ -430,10 +517,7 @@ export async function chat(req: {
   profile: string | null;
   layout_dna_guidance: string;
   target_node_id?: string;
-}): Promise<ChatResponse> {
-  return requestJson(
-    "/api/chat",
-    jsonRequest("POST", req),
-    "Chat request failed",
-  );
+}, onJob?: (jobId: string) => void): Promise<ChatResponse> {
+  const jobId = await submitJob("/api/chat", req, "Chat request failed", onJob);
+  return awaitJob<ChatResponse>(jobId, "Chat request failed");
 }
