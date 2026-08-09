@@ -11,6 +11,7 @@ MAX_EDITOR_DOCUMENT_NODES = 50_000
 MAX_EDITOR_DOCUMENT_DEPTH = 100
 _NODE_ID = re.compile(r"^[A-Za-z0-9_-]{1,80}$")
 _TAG_NAME = re.compile(r"^[A-Za-z][A-Za-z0-9:-]{0,79}$")
+_CSS_PROPERTY = re.compile(r"^(?:--)?[A-Za-z][A-Za-z0-9-]{0,79}$")
 
 
 class EditorDocumentValidationError(ValueError):
@@ -94,4 +95,29 @@ def validate_editor_document(value: dict[str, Any] | None) -> dict[str, Any] | N
         if not isinstance(children, list):
             raise EditorDocumentValidationError("Element children must be a list")
         pending.extend((child, depth + 1) for child in reversed(children))
+
+    responsive_styles = value.get("responsiveStyles", {})
+    if not isinstance(responsive_styles, dict):
+        raise EditorDocumentValidationError("responsiveStyles must be an object")
+    for node_id, breakpoint_styles in responsive_styles.items():
+        if node_id not in used_ids or not isinstance(breakpoint_styles, dict):
+            raise EditorDocumentValidationError(
+                "Responsive styles must reference an existing element"
+            )
+        for breakpoint, declarations in breakpoint_styles.items():
+            if breakpoint not in {"tablet", "mobile"} or not isinstance(
+                declarations, dict
+            ):
+                raise EditorDocumentValidationError(
+                    "Responsive style breakpoint is invalid"
+                )
+            if any(
+                not isinstance(property_name, str)
+                or not _CSS_PROPERTY.fullmatch(property_name)
+                or not isinstance(css_value, str)
+                for property_name, css_value in declarations.items()
+            ):
+                raise EditorDocumentValidationError(
+                    "Responsive style declarations are invalid"
+                )
     return value

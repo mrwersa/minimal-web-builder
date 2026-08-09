@@ -15,7 +15,12 @@ describe("EditorInspector", () => {
       current = next;
     });
     const view = render(
-      <EditorInspector document={current} node={link} onChange={onChange} />,
+      <EditorInspector
+        document={current}
+        node={link}
+        breakpoint="desktop"
+        onChange={onChange}
+      />,
     );
 
     fireEvent.change(screen.getByLabelText("Text content"), {
@@ -28,6 +33,7 @@ describe("EditorInspector", () => {
       <EditorInspector
         document={current}
         node={findNode(current, link.id)}
+        breakpoint="desktop"
         onChange={onChange}
       />,
     );
@@ -38,5 +44,31 @@ describe("EditorInspector", () => {
 
     expect(compileCanvas(current)).toContain('href="/new"');
     expect(onChange).toHaveBeenCalledTimes(2);
+  });
+
+  it("writes responsive style overrides for the selected viewport", () => {
+    const document = parseEditorDocument("<main>Responsive</main>");
+    const node = document.body[0];
+    if (node.type !== "element") throw new Error("expected main element");
+    let current = document;
+    const onChange = vi.fn((next) => {
+      current = next;
+    });
+    render(
+      <EditorInspector
+        document={current}
+        node={node}
+        breakpoint="mobile"
+        onChange={onChange}
+      />,
+    );
+
+    fireEvent.change(screen.getByLabelText("Padding"), {
+      target: { value: "12px" },
+    });
+    fireEvent.blur(screen.getByLabelText("Padding"));
+
+    expect(current.responsiveStyles?.[node.id]?.mobile?.padding).toBe("12px");
+    expect(compileCanvas(current)).not.toContain("padding: 12px");
   });
 });

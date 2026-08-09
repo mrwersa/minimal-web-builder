@@ -1,11 +1,18 @@
 import { describe, expect, it } from "vitest";
-import { compileCanvas, parseEditorDocument } from "./document";
+import {
+  compileCanvas,
+  compileDocument,
+  compileResponsiveCss,
+  parseEditorDocument,
+  replaceCanvas,
+} from "./document";
 import {
   editableText,
   elementEntries,
   elementPath,
   moveElementBefore,
   setElementAttribute,
+  setElementStyle,
   setElementText,
 } from "./operations";
 
@@ -44,5 +51,31 @@ describe("structured document operations", () => {
     const [main, section] = elementEntries(document);
 
     expect(moveElementBefore(document, main.node.id, section.node.id)).toBe(document);
+  });
+
+  it("compiles base and responsive styles into portable HTML", () => {
+    const document = parseEditorDocument("<main>Responsive</main>");
+    const main = elementEntries(document)[0].node;
+    const base = setElementStyle(document, main.id, "padding", "24px");
+    const tablet = setElementStyle(base, main.id, "padding", "16px", "tablet");
+    const mobile = setElementStyle(tablet, main.id, "display", "none", "mobile");
+
+    expect(compileCanvas(base)).toContain('style="padding: 24px;"');
+    expect(compileResponsiveCss(mobile)).toContain("max-width: 1023px");
+    expect(compileResponsiveCss(mobile)).toContain("padding: 16px;");
+    const portable = compileDocument(mobile, { includeEditorIds: false });
+    expect(portable).toContain(`class="mwb-node-${main.id}"`);
+    expect(portable).toContain("max-width: 639px");
+    expect(portable).not.toContain("data-mwb-id");
+  });
+
+  it("removes responsive styles when their canvas element is removed", () => {
+    const document = parseEditorDocument("<main>Keep</main><aside>Remove</aside>");
+    const [, aside] = elementEntries(document);
+    const styled = setElementStyle(document, aside.node.id, "display", "none", "mobile");
+
+    const replaced = replaceCanvas(styled, "<main data-mwb-id=\"node-keep\">Keep</main>", "");
+
+    expect(replaced.responsiveStyles).toEqual({});
   });
 });

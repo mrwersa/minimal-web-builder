@@ -1,4 +1,9 @@
-import type { DocumentNode, EditorDocumentV1, ElementNode } from "./document";
+import type {
+  DocumentNode,
+  EditorBreakpoint,
+  EditorDocumentV1,
+  ElementNode,
+} from "./document";
 
 export interface ElementEntry {
   node: ElementNode;
@@ -103,6 +108,53 @@ export function setElementText(
     ...node,
     children: value ? [{ type: "text", value }] : [],
   }));
+}
+
+function styleDeclaration(cssText: string): CSSStyleDeclaration {
+  const element = globalThis.document.createElement("div");
+  element.style.cssText = cssText;
+  return element.style;
+}
+
+export function elementStyleValue(
+  document: EditorDocumentV1,
+  node: ElementNode,
+  property: string,
+  breakpoint: "desktop" | EditorBreakpoint = "desktop",
+): string {
+  if (breakpoint !== "desktop") {
+    return document.responsiveStyles?.[node.id]?.[breakpoint]?.[property] ?? "";
+  }
+  return styleDeclaration(node.attributes.style ?? "").getPropertyValue(property);
+}
+
+export function setElementStyle(
+  document: EditorDocumentV1,
+  nodeId: string,
+  property: string,
+  value: string,
+  breakpoint: "desktop" | EditorBreakpoint = "desktop",
+): EditorDocumentV1 {
+  if (breakpoint === "desktop") {
+    return updateElement(document, nodeId, (node) => {
+      const declaration = styleDeclaration(node.attributes.style ?? "");
+      if (value.trim()) declaration.setProperty(property, value.trim());
+      else declaration.removeProperty(property);
+      const attributes = { ...node.attributes };
+      if (declaration.cssText) attributes.style = declaration.cssText;
+      else delete attributes.style;
+      return { ...node, attributes };
+    });
+  }
+
+  const responsiveStyles = structuredClone(document.responsiveStyles ?? {});
+  const nodeStyles = (responsiveStyles[nodeId] ??= {});
+  const breakpointStyles = (nodeStyles[breakpoint] ??= {});
+  if (value.trim()) breakpointStyles[property] = value.trim();
+  else delete breakpointStyles[property];
+  if (Object.keys(breakpointStyles).length === 0) delete nodeStyles[breakpoint];
+  if (Object.keys(nodeStyles).length === 0) delete responsiveStyles[nodeId];
+  return { ...document, responsiveStyles };
 }
 
 function containsElement(node: ElementNode, nodeId: string): boolean {

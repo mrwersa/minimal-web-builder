@@ -1,5 +1,10 @@
 export const DOCUMENT_SCHEMA_VERSION = 1 as const;
 export const NODE_ID_ATTRIBUTE = "data-mwb-id";
+export type EditorBreakpoint = "tablet" | "mobile";
+export type ResponsiveStyleMap = Record<
+  string,
+  Partial<Record<EditorBreakpoint, Record<string, string>>>
+>;
 
 export interface ElementNode {
   type: "element";
@@ -30,6 +35,7 @@ export interface EditorDocumentV1 {
   body: DocumentNode[];
   css: string;
   bodyScripts: string[];
+  responsiveStyles?: ResponsiveStyleMap;
 }
 
 const VOID_ELEMENTS = new Set([
@@ -111,15 +117,28 @@ function serializeAttributes(values: Record<string, string>): string {
     .join("");
 }
 
-function compileNode(node: DocumentNode, includeEditorIds: boolean): string {
+function compileNode(
+  node: DocumentNode,
+  includeEditorIds: boolean,
+  responsiveNodeIds: Set<string>,
+): string {
   if (node.type === "text") return escapeText(node.value);
   if (node.type === "comment") return `<!--${node.value.replaceAll("-->", "--&gt;")}-->`;
-  const values = includeEditorIds
-    ? { ...node.attributes, [NODE_ID_ATTRIBUTE]: node.id }
-    : node.attributes;
+  const values = { ...node.attributes };
+  if (includeEditorIds) values[NODE_ID_ATTRIBUTE] = node.id;
+  else if (responsiveNodeIds.has(node.id)) {
+    values.class = Array.from(
+      new Set([
+        ...(values.class ?? "").split(/\s+/).filter(Boolean),
+        `mwb-node-${node.id}`,
+      ]),
+    ).join(" ");
+  }
   const opening = `<${node.tag}${serializeAttributes(values)}>`;
   if (VOID_ELEMENTS.has(node.tag)) return opening;
-  return `${opening}${node.children.map((child) => compileNode(child, includeEditorIds)).join("")}</${node.tag}>`;
+  return `${opening}${node.children
+    .map((child) => compileNode(child, includeEditorIds, responsiveNodeIds))
+    .join("")}</${node.tag}>`;
 }
 
 export function parseEditorDocument(html: string): EditorDocumentV1 {
@@ -147,23 +166,72 @@ export function parseEditorDocument(html: string): EditorDocumentV1 {
     body: parseNodes(body),
     css,
     bodyScripts,
+    responsiveStyles: {},
   };
 }
 
 export function compileCanvas(document: EditorDocumentV1): string {
-  return document.body.map((node) => compileNode(node, true)).join("");
+  return document.body
+    .map((node) => compileNode(node, true, new Set()))
+    .join("");
+}
+
+function cssDeclarations(values: Record<string, string>): string {
+  return Object.entries(values)
+    .filter(([, value]) => value.trim())
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([property, value]) => `${property}: ${value.trim()};`)
+    .join(" ");
+}
+
+export function compileResponsiveCss(
+  document: EditorDocumentV1,
+  { includeEditorIds = true }: { includeEditorIds?: boolean } = {},
+): string {
+  const styles = document.responsiveStyles ?? {};
+  const blocks: string[] = [];
+  for (const [breakpoint, width] of [
+    ["tablet", 1023],
+    ["mobile", 639],
+  ] as const) {
+    const rules = Object.entries(styles)
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([nodeId, byBreakpoint]) => {
+        const declarations = cssDeclarations(byBreakpoint[breakpoint] ?? {});
+        if (!declarations) return "";
+        const selector = includeEditorIds
+          ? `[${NODE_ID_ATTRIBUTE}="${nodeId}"]`
+          : `.mwb-node-${nodeId}`;
+        return `${selector} { ${declarations} }`;
+      })
+      .filter(Boolean);
+    if (rules.length > 0) {
+      blocks.push(`@media (max-width: ${width}px) {\n${rules.join("\n")}\n}`);
+    }
+  }
+  return blocks.join("\n");
 }
 
 export function compileDocument(
   document: EditorDocumentV1,
   { includeEditorIds = true }: { includeEditorIds?: boolean } = {},
 ): string {
+  const compiledCss = [
+    document.css.trim(),
+    compileResponsiveCss(document, { includeEditorIds }),
+  ]
+    .filter(Boolean)
+    .join("\n\n")
+    .trim();
   const headItems = [
     document.headHtml,
-    document.css.trim() ? `<style>\n${document.css.trim()}\n</style>` : "",
+    compiledCss ? `<style>\n${compiledCss}\n</style>` : "",
   ].filter(Boolean);
+  const responsiveNodeIds = new Set(Object.keys(document.responsiveStyles ?? {}));
   const bodyItems = [
-    document.body.map((node) => compileNode(node, includeEditorIds)).join(""),
+    document.body
+      .map((node) => compileNode(node, includeEditorIds, responsiveNodeIds))
+      .join(""),
     ...document.bodyScripts,
   ].filter(Boolean);
   return [
@@ -180,7 +248,21 @@ export function replaceCanvas(
   css: string,
 ): EditorDocumentV1 {
   const parsed = new DOMParser().parseFromString(`<body>${bodyHtml}</body>`, "text/html");
-  return { ...document, body: parseNodes(parsed.body), css };
+  const body = parseNodes(parsed.body);
+  const nodeIds = new Set<string>();
+  const pending = [...body];
+  while (pending.length > 0) {
+    const node = pending.shift();
+    if (node?.type !== "element") continue;
+    nodeIds.add(node.id);
+    pending.unshift(...node.children);
+  }
+  const responsiveStyles = Object.fromEntries(
+    Object.entries(document.responsiveStyles ?? {}).filter(([nodeId]) =>
+      nodeIds.has(nodeId),
+    ),
+  );
+  return { ...document, body, css, responsiveStyles };
 }
 
 export function findNode(

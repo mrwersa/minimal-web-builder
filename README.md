@@ -40,6 +40,7 @@ A sleek, minimalist web application builder powered by AI (Gemini / OpenRouter).
 - Named revision checkpoints, restore, and one-click project branching from any revision
 - Database-backed generation/authentication rate limits, idempotency keys, and owner-scoped audit events
 - A document-native visual workspace with stable selection, breadcrumbs, draggable layers, and a focused property inspector
+- Desktop, tablet, and mobile canvas presets with zoom and direct responsive controls for spacing, typography, color, layout, visibility, and links
 
 
 ## Setup
@@ -94,7 +95,7 @@ For a single-process production build, run `cd web && npm run build` then
 
 To refine a single section after generation, open the sidebar, pick a section from the "Regenerate section" dropdown, choose a **Refine focus** (General, Spacing, Typography, Layout, or Color), and press **Regenerate section**. The selected block is regenerated in place while the rest of the page stays untouched.
 
-To edit the generated page directly, turn on **WYSIWYG editing** in the sidebar (Refine section). Select elements and edit them on the visual canvas. Changes sync back after a short debounce, preserving page metadata, styles, attributes, and scripts; Preview, Code, export, and undo/redo all use the updated document. Editing pauses while generation is running.
+To edit the generated page directly, turn on **WYSIWYG editing** in the sidebar (Refine section). Select elements in the canvas or Layers tree, then use the Inspector for content, spacing, typography, color, layout, visibility, and links. Desktop, tablet, and mobile presets apply breakpoint-specific values without regenerating the page, and zoom keeps narrow canvases comfortable to edit. Preview, Code, export, and undo/redo all use the updated structured document while preserving page metadata, styles, attributes, and scripts. Editing pauses while generation is running.
 
 ## How It Works
 
