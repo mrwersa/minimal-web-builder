@@ -15,6 +15,7 @@ import { useStore } from "../../store";
 import GrapeJSEditor from "../GrapeJSEditor";
 import DesignTokensPanel from "./DesignTokensPanel";
 import EditorInspector from "./EditorInspector";
+import ElementAiPanel from "./ElementAiPanel";
 import LayerTree from "./LayerTree";
 
 export default function EditorWorkspace({ document }: { document: EditorDocumentV1 }) {
@@ -138,6 +139,7 @@ export default function EditorWorkspace({ document }: { document: EditorDocument
           <h2 className="flex items-center gap-1.5 border-b border-border2 px-3 py-2 text-xs font-semibold text-text2">
             <SlidersHorizontal className="h-3.5 w-3.5 text-muted2" /> Inspector
           </h2>
+          <ElementAiPanel node={selectedNode} />
           <EditorInspector
             document={document}
             node={selectedNode}

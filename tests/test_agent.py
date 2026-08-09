@@ -69,6 +69,15 @@ def test_classify_refine_keyword_routes_to_refine() -> None:
     assert _classify_intent(s)["intent"] == "refine"
 
 
+def test_selected_element_always_routes_to_refine() -> None:
+    s: BuilderState = {
+        "user_input": "fix it",
+        "current_code": '<main data-mwb-id="target">Old</main>',
+        "target_node_id": "target",
+    }  # type: ignore
+    assert _classify_intent(s)["intent"] == "refine"
+
+
 def test_classify_question_routes_to_answer() -> None:
     s: BuilderState = {
         "user_input": "how do I export the page?",
@@ -92,6 +101,26 @@ def test_validate_passes_on_valid_html() -> None:
     result = _validate_output(state)
     assert result["validation_errors"] == []
     assert "<h1>Hello</h1>" in result["generation_result"]
+
+
+def test_validate_scopes_generated_changes_to_selected_element() -> None:
+    state: BuilderState = {
+        "current_code": (
+            '<!doctype html><html><body><header>Keep</header>'
+            '<main data-mwb-id="target">Old</main></body></html>'
+        ),
+        "generation_result": (
+            '<!doctype html><html><body><header>Changed</header>'
+            '<main data-mwb-id="target">New</main></body></html>'
+        ),
+        "target_node_id": "target",
+    }  # type: ignore
+
+    result = _validate_output(state)
+
+    assert result["validation_errors"] == []
+    assert "<header>Keep</header>" in result["generation_result"]
+    assert '<main data-mwb-id="target">New</main>' in result["generation_result"]
 
 
 def test_validate_fails_on_missing_body() -> None:

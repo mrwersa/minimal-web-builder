@@ -430,6 +430,7 @@ export async function chat(req: {
   strict_minimal: boolean;
   profile: string | null;
   layout_dna_guidance: string;
+  target_node_id?: string;
 }): Promise<ChatResponse> {
   return requestJson(
     "/api/chat",

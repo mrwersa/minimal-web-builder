@@ -22,6 +22,8 @@ from typing import Annotated, Any, TypedDict
 from langgraph.graph import END, START, StateGraph
 from langgraph.graph.message import add_messages
 
+from server.editor_scope import apply_scoped_generation
+
 # Reuse the generation wrapper from runtime
 from server.runtime import GenerationClient, generate
 from src.a11y import audit_generated_html
@@ -65,12 +67,16 @@ class BuilderState(TypedDict):
     retry_count: int
     settings: dict[str, Any]
     error: str | None
+    target_node_id: str | None
 
 
 def _classify_intent(state: BuilderState) -> dict[str, Any]:
     """Route the user's latest message to the right workflow."""
     user_input = state.get("user_input", "")
     has_code = bool(state.get("current_code"))
+
+    if state.get("target_node_id") and has_code:
+        return {"intent": "refine"}
 
     # Greetings or very short inputs → answer (don't waste a generation call)
     if _GREETING_RE.match(user_input) or len(user_input.strip()) < 10:
@@ -150,6 +156,17 @@ def _validate_output(state: BuilderState) -> dict[str, Any]:
 
     clean = strip_html_code_fence(raw)
     sanitized, safety_alerts = apply_output_safety_policy(clean)
+    target_node_id = state.get("target_node_id")
+    if target_node_id:
+        try:
+            sanitized = apply_scoped_generation(
+                state.get("current_code") or "", sanitized, target_node_id
+            )
+        except ValueError as exc:
+            return {
+                "validation_errors": [str(exc)],
+                "validation_notes": [],
+            }
     a11y_notes = audit_generated_html(sanitized)
     js_notes = audit_inline_scripts(sanitized)
 
@@ -333,6 +350,7 @@ def run_agent(
     current_code: str | None = None,
     settings: dict[str, Any] | None = None,
     history: list[dict[str, str]] | None = None,
+    target_node_id: str | None = None,
 ) -> dict[str, Any]:
     """Run the agent for one user turn. Returns the final state snapshot."""
     graph = get_graph()
@@ -346,6 +364,7 @@ def run_agent(
         "validation_errors": [],
         "validation_notes": [],
         "settings": settings or {},
+        "target_node_id": target_node_id,
     }
 
     # If there's current code, seed it so the refine path has context
@@ -358,6 +377,20 @@ def run_agent(
                 "content": f"Here is the current version of the website code:\n\n{current_code.strip()}",
             },
         )
+        if target_node_id:
+            initial["messages"].insert(
+                1,
+                {
+                    "role": "system",
+                    "content": (
+                        "Edit only the element whose data-mwb-id is "
+                        f'"{target_node_id}" and its descendants. Preserve that '
+                        "data-mwb-id, every node outside it, document metadata, and "
+                        "global CSS/JavaScript exactly. Put any new styling inline on "
+                        "the target subtree. Return the complete HTML document."
+                    ),
+                },
+            )
     else:
         initial["current_code"] = None
 

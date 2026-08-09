@@ -131,6 +131,27 @@ describe("document revision workflows", () => {
     expect(useStore.getState().code).toBe(canonical("<html>old</html>"));
   });
 
+  it("sends selected element IDs as explicit scoped chat targets", async () => {
+    const document = parseEditorDocument("<main>Old</main>");
+    const node = document.body[0];
+    if (node.type !== "element") throw new Error("expected main element");
+    useStore.setState({ code: compileDocument(document), editorDocument: document });
+    vi.mocked(api.chat).mockResolvedValue({
+      html: null,
+      message: "Done",
+      intent: "refine",
+      validation_errors: [],
+      validation_notes: [],
+      error: null,
+    });
+
+    await useStore.getState().runChat("make it warmer", node.id);
+
+    expect(api.chat).toHaveBeenCalledWith(
+      expect.objectContaining({ target_node_id: node.id }),
+    );
+  });
+
   it("opens a template as a new conversation and a reversible revision", async () => {
     useStore.setState({
       code: "<html>old</html>",

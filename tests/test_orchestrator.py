@@ -65,3 +65,43 @@ def test_recover_interrupted_jobs(orchestrator) -> None:
         assert job is not None
         assert job.status == "failed"
         assert job.error == "Generation interrupted by server restart"
+
+
+def test_chat_passes_scoped_target_to_agent_and_job(
+    orchestrator, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    service, database = orchestrator
+    captured: dict = {}
+
+    def fake_run_agent(user_input, **kwargs):
+        captured.update({"user_input": user_input, **kwargs})
+        return {
+            "messages": [
+                {"role": "user", "content": user_input},
+                {"role": "assistant", "content": "Done"},
+            ],
+            "current_code": kwargs["current_code"],
+            "intent": "refine",
+        }
+
+    monkeypatch.setattr("server.orchestrator.run_agent", fake_run_agent)
+    html = '<main data-mwb-id="target">Old</main>'
+
+    result = service.chat(
+        OWNER_ID,
+        "scoped-thread",
+        "make it warmer",
+        html,
+        {},
+        None,  # type: ignore[arg-type]
+        "target",
+    )
+
+    assert result["intent"] == "refine"
+    assert captured["target_node_id"] == "target"
+    with database.sessions() as session:
+        job = session.scalar(
+            select(GenerationJobRecord).order_by(GenerationJobRecord.created_at.desc())
+        )
+        assert job is not None
+        assert job.request["target_node_id"] == "target"

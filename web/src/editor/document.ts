@@ -164,6 +164,47 @@ function extractDesignTokens(css: string): {
   return { css: withoutTokens.trim(), designTokens };
 }
 
+function extractResponsiveStyles(css: string): {
+  css: string;
+  responsiveStyles: ResponsiveStyleMap;
+} {
+  const responsiveStyles: ResponsiveStyleMap = {};
+  const withoutResponsive = css.replace(
+    /@media \(max-width: (1023|639)px\) \{\n((?:\[data-mwb-id="[A-Za-z0-9_-]{1,80}"\] \{ [^{}\n]* \}\n)+)\}/g,
+    (block, width: string, rules: string) => {
+      const parsedRules: Array<[string, Record<string, string>]> = [];
+      for (const line of rules.trim().split("\n")) {
+        const match = line.match(
+          /^\[data-mwb-id="([A-Za-z0-9_-]{1,80})"\] \{ ([^{}]*) \}$/,
+        );
+        if (!match) return block;
+        const declarations = Object.fromEntries(
+          match[2]
+            .split(";")
+            .map((declaration) => declaration.trim())
+            .filter(Boolean)
+            .map((declaration) => {
+              const separator = declaration.indexOf(":");
+              return [
+                declaration.slice(0, separator).trim(),
+                declaration.slice(separator + 1).trim(),
+              ];
+            })
+            .filter(([property, value]) => property && value),
+        );
+        parsedRules.push([match[1], declarations]);
+      }
+      const breakpoint: EditorBreakpoint = width === "1023" ? "tablet" : "mobile";
+      for (const [nodeId, declarations] of parsedRules) {
+        const nodeStyles = (responsiveStyles[nodeId] ??= {});
+        nodeStyles[breakpoint] = declarations;
+      }
+      return "";
+    },
+  );
+  return { css: withoutResponsive.trim(), responsiveStyles };
+}
+
 export function parseEditorDocument(html: string): EditorDocumentV1 {
   const parser = new DOMParser();
   const parsed = parser.parseFromString(html, "text/html");
@@ -173,7 +214,8 @@ export function parseEditorDocument(html: string): EditorDocumentV1 {
     .map((style) => style.textContent ?? "")
     .filter(Boolean)
     .join("\n\n");
-  const { css, designTokens } = extractDesignTokens(compiledCss);
+  const tokens = extractDesignTokens(compiledCss);
+  const { css, responsiveStyles } = extractResponsiveStyles(tokens.css);
   const bodyScripts = Array.from(body.querySelectorAll("script")).map(
     (script) => script.outerHTML,
   );
@@ -190,8 +232,8 @@ export function parseEditorDocument(html: string): EditorDocumentV1 {
     body: parseNodes(body),
     css,
     bodyScripts,
-    responsiveStyles: {},
-    designTokens,
+    responsiveStyles,
+    designTokens: tokens.designTokens,
   };
 }
 

@@ -253,6 +253,20 @@ def test_chat_checkpoint_and_job_are_durable(client: TestClient) -> None:
     assert jobs[0]["status"] == "succeeded"
 
 
+def test_chat_rejects_a_missing_scoped_editor_node(client: TestClient) -> None:
+    response = client.post(
+        "/api/chat",
+        json={
+            "message": "make it warmer",
+            "current_code": '<main data-mwb-id="present">Old</main>',
+            "target_node_id": "missing",
+        },
+    )
+
+    assert response.status_code == 400
+    assert "Selected element" in response.json()["detail"]
+
+
 def test_project_revision_api_round_trip(client: TestClient) -> None:
     created_response = client.post(
         "/api/projects",

@@ -42,6 +42,7 @@ A sleek, minimalist web application builder powered by AI (Gemini / OpenRouter).
 - A document-native visual workspace with stable selection, breadcrumbs, draggable layers, and a focused property inspector
 - Desktop, tablet, and mobile canvas presets with zoom and direct responsive controls for spacing, typography, color, layout, visibility, and links
 - Global color, typography, spacing, radius, and container tokens that can be reused across element styles
+- Element-scoped AI editing that uses stable node IDs and applies only the generated target subtree
 
 
 ## Setup

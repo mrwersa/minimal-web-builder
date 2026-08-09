@@ -79,10 +79,22 @@ test("generate, edit, undo, and export the page", async ({ page }) => {
     });
   });
   await page.route("**/api/chat", (route) => {
-    conversationHtml = editedHtml;
+    const request = route.request().postDataJSON() as {
+      current_code: string;
+      target_node_id?: string;
+    };
+    const responseHtml = request.target_node_id
+      ? request.current_code.replace(">Fern Coffee<", ">Fern Ember<")
+      : editedHtml;
+    if (request.target_node_id) {
+      expect(request.current_code).toContain(
+        `data-mwb-id="${request.target_node_id}"`,
+      );
+    }
+    conversationHtml = responseHtml;
     return route.fulfill({
       json: {
-        html: editedHtml,
+        html: responseHtml,
         message: "Updated the heading.",
         intent: "refine",
         validation_errors: [],
@@ -146,6 +158,11 @@ test("generate, edit, undo, and export the page", async ({ page }) => {
         .evaluate((element) => getComputedStyle(element).color),
     )
     .toBe("rgb(194, 65, 12)");
+  await page.getByLabel("Element AI instruction").fill("Make this name warmer");
+  await page.getByLabel("Apply AI edit to selected element").click();
+  await expect(page.getByRole("treeitem", { name: /h1 · Fern Ember/ })).toBeVisible();
+  await page.getByTitle("Undo (Ctrl+Z)").click();
+  await expect(page.getByRole("treeitem", { name: /h1 · Fern Coffee/ })).toBeVisible();
   await page.getByRole("button", { name: "Tablet viewport" }).click();
   await expect(page.getByText("768px", { exact: true })).toBeVisible();
   await page.getByRole("button", { name: "Mobile viewport" }).click();
