@@ -66,7 +66,10 @@ A sleek, minimalist web application builder powered by AI (Gemini / OpenRouter).
    alembic upgrade head
    ```
    A new local SQLite database creates its schema automatically; migrations remain
-   the canonical upgrade and production schema history. The first account created
+   the canonical upgrade and production schema history. Automatic creation only
+   ever adds missing tables, so an existing database still needs `alembic upgrade
+   head` after a schema change — startup refuses to run against an out-of-date
+   database and names the missing tables or columns. The first account created
    after this ownership migration claims projects created by the pre-auth version.
 4. Run both processes:
    ```bash
