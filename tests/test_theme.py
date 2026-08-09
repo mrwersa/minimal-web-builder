@@ -1,16 +1,13 @@
 from src.theme import (
-    COLORS,
     COMPLEXITY_BY_KEY,
     COMPLEXITY_LEVELS,
     DEFAULT_COMPLEXITY_KEY,
     DEFAULT_TONE_KEY,
     REFINE_ASPECTS,
     REFINE_ASPECTS_BY_KEY,
-    SPACING,
     STRICT_MINIMAL_GUIDANCE,
     TONE_PRESETS,
     TONE_PRESETS_BY_KEY,
-    TYPE_SCALE,
     TonePreset,
     complexity_options,
     tone_options,
@@ -44,14 +41,6 @@ def test_required_tone_guidance_present() -> None:
 
 def test_strict_minimal_guidance_defined() -> None:
     assert "monochrome" in STRICT_MINIMAL_GUIDANCE.lower()
-
-
-def test_design_tokens_have_expected_keys() -> None:
-    assert {"bg", "surface", "border", "text", "muted", "accent", "accent_soft"} <= set(
-        COLORS
-    )
-    assert {"xs", "sm", "md", "lg", "xl"} <= set(SPACING)
-    assert {"sm", "base", "lg", "xl", "xxl"} <= set(TYPE_SCALE)
 
 
 def test_default_complexity_is_balanced() -> None:

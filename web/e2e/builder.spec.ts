@@ -46,7 +46,6 @@ test("generate, edit, undo, and export the page", async ({ page }) => {
         refine_aspects: [{ key: "general", label: "General" }],
         sections: [{ key: "hero", label: "Hero" }],
         color_limits: [{ key: "single-accent", label: "Single accent" }],
-        tokens: {},
       },
     }),
   );

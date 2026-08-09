@@ -6,6 +6,8 @@ import {
   parseEditorDocument,
   replaceCanvas,
 } from "../editor/document";
+import { elementEntries, setElementStyle } from "../editor/operations";
+import { setDesignToken } from "../editor/tokens";
 
 describe("GrapeJS document round trip", () => {
   it("preserves metadata, attributes, scripts, and doctype", () => {
@@ -68,5 +70,27 @@ describe("GrapeJS document round trip", () => {
     expect(compileDocument(document, { includeEditorIds: false })).not.toContain(
       "data-mwb-id",
     );
+  });
+
+  it("does not lose structured data over repeated preview and export round trips", () => {
+    let document = parseEditorDocument(`<!doctype html><html lang="en">
+      <head><meta name="description" content="Round trip"><style>.base { display: block; }</style></head>
+      <body class="page"><main style="padding: 24px">Keep me</main><script>window.ready = true;</script></body>
+    </html>`);
+    const main = elementEntries(document)[0].node;
+    document = setDesignToken(document, "color-primary", "#2563eb");
+    document = setElementStyle(document, main.id, "color", "var(--mwb-color-primary)");
+    document = setElementStyle(document, main.id, "padding", "12px", "mobile");
+    const expected = compileDocument(document);
+
+    for (let round = 0; round < 12; round += 1) {
+      document = parseEditorDocument(compileDocument(document));
+    }
+
+    expect(compileDocument(document)).toBe(expected);
+    expect(document.designTokens).toEqual({ "color-primary": "#2563eb" });
+    expect(document.responsiveStyles?.[main.id]?.mobile?.padding).toBe("12px");
+    expect(document.headHtml).toContain('name="description"');
+    expect(document.bodyScripts).toEqual(["<script>window.ready = true;</script>"]);
   });
 });
