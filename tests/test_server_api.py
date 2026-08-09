@@ -555,3 +555,67 @@ def test_conversations_and_jobs_are_isolated_between_users(client: TestClient) -
 
     assert client.get("/api/conversations/private-thread").status_code == 404
     assert client.get("/api/generation-jobs").json()["jobs"] == []
+
+
+def test_generation_endpoints_return_a_job_rather_than_a_result(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(
+        "server.main.generate",
+        lambda *a, **k: "<!doctype html><html><body><h1>Hi</h1></body></html>",
+    )
+
+    response = client.post("/api/generate", json={"prompt": "a landing page"})
+
+    assert response.status_code == 202
+    assert response.json()["status"] == "queued"
+    assert response.json()["job_id"]
+
+
+def test_active_job_endpoint_is_empty_while_idle(client: TestClient) -> None:
+    assert client.get("/api/generation-jobs/active").json() == {"job": None}
+
+
+def test_literal_job_routes_are_not_shadowed_by_the_job_id_route(
+    client: TestClient,
+) -> None:
+    """`stats` and `active` must not be parsed as job IDs."""
+    assert "totals" in client.get("/api/generation-jobs/stats").json()
+    assert "job" in client.get("/api/generation-jobs/active").json()
+
+
+def test_unknown_job_is_reported_as_missing(client: TestClient) -> None:
+    assert client.get("/api/generation-jobs/does-not-exist").status_code == 404
+    assert client.post("/api/generation-jobs/does-not-exist/cancel").status_code == 404
+
+
+def test_cancelling_a_settled_job_reports_its_final_state(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(
+        "server.main.generate",
+        lambda *a, **k: "<!doctype html><html><body><h1>Hi</h1></body></html>",
+    )
+    job = run_generation(client, "/api/generate", {"prompt": "a landing page"})
+
+    cancelled = client.post(f"/api/generation-jobs/{job['id']}/cancel")
+
+    assert cancelled.status_code == 200
+    assert cancelled.json()["status"] == "succeeded"
+
+
+def test_repeating_an_idempotent_submission_reuses_the_same_job(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A retried submission must not start a second generation."""
+    monkeypatch.setattr(
+        "server.main.generate",
+        lambda *a, **k: "<!doctype html><html><body><h1>Hi</h1></body></html>",
+    )
+    payload = {"prompt": "a landing page"}
+    headers = {"Idempotency-Key": "submit-once"}
+
+    first = client.post("/api/generate", json=payload, headers=headers)
+    second = client.post("/api/generate", json=payload, headers=headers)
+
+    assert first.json()["job_id"] == second.json()["job_id"]
