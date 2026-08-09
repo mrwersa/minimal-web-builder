@@ -88,7 +88,7 @@ interface State {
   restoreRevision: (revisionId: string) => Promise<void>;
   createCheckpoint: () => Promise<void>;
   duplicateRevision: (revisionId: string, sequence: number) => Promise<void>;
-  runChat: (message: string) => Promise<void>;
+  runChat: (message: string, targetNodeId?: string) => Promise<void>;
   restoreConversation: () => Promise<void>;
   clearChat: () => void;
   undo: () => void;
@@ -639,7 +639,7 @@ export const useStore = create<State>((set, get) => ({
     }
   },
 
-  runChat: async (message) => {
+  runChat: async (message, targetNodeId) => {
     const s = get();
     const userMsg: api.ChatMessage = { role: "user", content: message };
     set({
@@ -657,6 +657,7 @@ export const useStore = create<State>((set, get) => ({
         strict_minimal: s.strictMinimal,
         profile: s.profile,
         layout_dna_guidance: s.layoutDnaGuidance,
+        target_node_id: targetNodeId,
       });
       const assistantMsg: api.ChatMessage = { role: "assistant", content: res.message };
       if (res.html) get().setCodeWithHistory(res.html);

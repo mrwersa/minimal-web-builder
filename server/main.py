@@ -16,7 +16,7 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from server.asset_routes import router as asset_router
 from server.assets import (
@@ -32,7 +32,8 @@ from server.content import DocumentValidationError, validate_document
 from server.control_routes import router as control_router
 from server.controls import IdempotencyConflictError, RequestControlService
 from server.database import Database
-from server.documents import EditorDocumentValidationError
+from server.documents import EDITOR_NODE_ID_PATTERN, EditorDocumentValidationError
+from server.editor_scope import find_editor_element
 from server.mutations import run_idempotent
 from server.orchestrator import ConversationValidationError, GenerationOrchestrator
 from server.project_routes import router as project_router
@@ -362,6 +363,7 @@ class ChatRequest(BaseModel):
     strict_minimal: bool = False
     profile: str | None = None
     layout_dna_guidance: str = ""
+    target_node_id: str | None = Field(default=None, pattern=EDITOR_NODE_ID_PATTERN)
 
 
 @app.post("/api/chat")
@@ -380,6 +382,14 @@ async def chat(
     )
     if err:
         raise HTTPException(status_code=400, detail=err)
+    if req.target_node_id and (
+        not req.current_code
+        or find_editor_element(req.current_code, req.target_node_id) is None
+    ):
+        raise HTTPException(
+            status_code=400,
+            detail="Selected element is not present in the current document",
+        )
 
     effective = _effective_settings(req)
     settings = {
@@ -405,6 +415,7 @@ async def chat(
             req.current_code,
             settings,
             _client(),
+            req.target_node_id,
         ),
     )
     return JSONResponse(result)

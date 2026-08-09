@@ -82,6 +82,7 @@ class GenerationOrchestrator:
         current_code: str | None,
         settings: dict[str, Any],
         client: GenerationClient,
+        target_node_id: str | None = None,
     ) -> dict[str, Any]:
         clean_thread_id = _thread_id(thread_id)
         conversation = self._get_or_create_conversation(owner_id, clean_thread_id)
@@ -94,6 +95,7 @@ class GenerationOrchestrator:
                 current_code=current_code or conversation.current_code,
                 settings=settings,
                 history=list(conversation.messages),
+                target_node_id=target_node_id,
             )
             messages = [
                 snapshot
@@ -124,7 +126,11 @@ class GenerationOrchestrator:
         return self.execute(
             owner_id,
             "chat",
-            {"thread_id": clean_thread_id, "message": user_input},
+            {
+                "thread_id": clean_thread_id,
+                "message": user_input,
+                "target_node_id": target_node_id,
+            },
             work,
             conversation_id=conversation.id,
         )

@@ -9,7 +9,8 @@ from typing import Any
 MAX_EDITOR_DOCUMENT_CHARS = 4_000_000
 MAX_EDITOR_DOCUMENT_NODES = 50_000
 MAX_EDITOR_DOCUMENT_DEPTH = 100
-_NODE_ID = re.compile(r"^[A-Za-z0-9_-]{1,80}$")
+EDITOR_NODE_ID_PATTERN = r"^[A-Za-z0-9_-]{1,80}$"
+_NODE_ID = re.compile(EDITOR_NODE_ID_PATTERN)
 _TAG_NAME = re.compile(r"^[A-Za-z][A-Za-z0-9:-]{0,79}$")
 _CSS_PROPERTY = re.compile(r"^(?:--)?[A-Za-z][A-Za-z0-9-]{0,79}$")
 _DESIGN_TOKEN = re.compile(r"^[a-z][a-z0-9-]{0,79}$")

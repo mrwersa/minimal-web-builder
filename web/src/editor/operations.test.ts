@@ -69,6 +69,9 @@ describe("structured document operations", () => {
     expect(portable).toContain(`class="mwb-node-${main.id}"`);
     expect(portable).toContain("max-width: 639px");
     expect(portable).not.toContain("data-mwb-id");
+    const roundTrip = parseEditorDocument(compileDocument(mobile));
+    expect(roundTrip.responsiveStyles).toEqual(mobile.responsiveStyles);
+    expect(roundTrip.css).not.toContain("max-width: 639px");
   });
 
   it("removes responsive styles when their canvas element is removed", () => {
