@@ -1,6 +1,7 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { compileCanvas, findNode, parseEditorDocument } from "../../editor/document";
+import { setDesignToken } from "../../editor/tokens";
 import EditorInspector from "./EditorInspector";
 
 describe("EditorInspector", () => {
@@ -70,5 +71,38 @@ describe("EditorInspector", () => {
 
     expect(current.responsiveStyles?.[node.id]?.mobile?.padding).toBe("12px");
     expect(compileCanvas(current)).not.toContain("padding: 12px");
+  });
+
+  it("offers only compatible global tokens for a style property", () => {
+    let current = setDesignToken(
+      setDesignToken(
+        parseEditorDocument("<main>Tokens</main>"),
+        "color-primary",
+        "#2563eb",
+      ),
+      "space-md",
+      "16px",
+    );
+    const node = current.body[0];
+    if (node.type !== "element") throw new Error("expected main element");
+    const onChange = vi.fn((next) => {
+      current = next;
+    });
+    render(
+      <EditorInspector
+        document={current}
+        node={node}
+        breakpoint="desktop"
+        onChange={onChange}
+      />,
+    );
+
+    expect(screen.getByLabelText("Text color token")).toHaveTextContent("Primary color");
+    expect(screen.getByLabelText("Text color token")).not.toHaveTextContent("Medium space");
+    fireEvent.change(screen.getByLabelText("Text color token"), {
+      target: { value: "var(--mwb-color-primary)" },
+    });
+
+    expect(compileCanvas(current)).toContain("color: var(--mwb-color-primary)");
   });
 });

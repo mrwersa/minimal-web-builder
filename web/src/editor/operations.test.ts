@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   compileCanvas,
+  compileDesignTokenCss,
   compileDocument,
   compileResponsiveCss,
   parseEditorDocument,
@@ -15,6 +16,7 @@ import {
   setElementStyle,
   setElementText,
 } from "./operations";
+import { designTokenReference, setDesignToken } from "./tokens";
 
 describe("structured document operations", () => {
   it("finds a stable hierarchy and updates properties immutably", () => {
@@ -77,5 +79,25 @@ describe("structured document operations", () => {
     const replaced = replaceCanvas(styled, "<main data-mwb-id=\"node-keep\">Keep</main>", "");
 
     expect(replaced.responsiveStyles).toEqual({});
+  });
+
+  it("compiles reusable design tokens and applies their references", () => {
+    const document = parseEditorDocument("<main>Tokens</main>");
+    const main = elementEntries(document)[0].node;
+    const withToken = setDesignToken(document, "color-primary", "#2563eb");
+    const styled = setElementStyle(
+      withToken,
+      main.id,
+      "color",
+      designTokenReference("color-primary"),
+    );
+
+    expect(compileDesignTokenCss(styled)).toBe(
+      ":root { --mwb-color-primary: #2563eb; }",
+    );
+    expect(compileDocument(styled)).toContain("color: var(--mwb-color-primary)");
+    const roundTrip = parseEditorDocument(compileDocument(styled));
+    expect(roundTrip.designTokens).toEqual({ "color-primary": "#2563eb" });
+    expect(roundTrip.css).not.toContain("--mwb-color-primary");
   });
 });

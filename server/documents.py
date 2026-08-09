@@ -12,6 +12,7 @@ MAX_EDITOR_DOCUMENT_DEPTH = 100
 _NODE_ID = re.compile(r"^[A-Za-z0-9_-]{1,80}$")
 _TAG_NAME = re.compile(r"^[A-Za-z][A-Za-z0-9:-]{0,79}$")
 _CSS_PROPERTY = re.compile(r"^(?:--)?[A-Za-z][A-Za-z0-9-]{0,79}$")
+_DESIGN_TOKEN = re.compile(r"^[a-z][a-z0-9-]{0,79}$")
 
 
 class EditorDocumentValidationError(ValueError):
@@ -120,4 +121,14 @@ def validate_editor_document(value: dict[str, Any] | None) -> dict[str, Any] | N
                 raise EditorDocumentValidationError(
                     "Responsive style declarations are invalid"
                 )
+
+    design_tokens = value.get("designTokens", {})
+    if not isinstance(design_tokens, dict) or any(
+        not isinstance(name, str)
+        or not _DESIGN_TOKEN.fullmatch(name)
+        or not isinstance(token_value, str)
+        or len(token_value) > 500
+        for name, token_value in design_tokens.items()
+    ):
+        raise EditorDocumentValidationError("Design tokens are invalid")
     return value
