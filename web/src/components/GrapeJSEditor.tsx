@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef } from "react";
-import grapesjs, { type Editor } from "grapesjs";
+import grapesjs, { type Component, type Editor } from "grapesjs";
 import "grapesjs/dist/css/grapes.min.css";
 import {
   compileCanvas,
@@ -10,10 +10,31 @@ import {
 
 interface GrapeJSEditorProps {
   document: EditorDocumentV1;
+  selectedNodeId: string | null;
+  onSelect: (nodeId: string) => void;
   onUpdate: (document: EditorDocumentV1) => void;
 }
 
-export default function GrapeJSEditor({ document, onUpdate }: GrapeJSEditorProps) {
+function componentNodeId(component: Component | null | undefined): string | null {
+  const value = component?.getAttributes()?.["data-mwb-id"];
+  return typeof value === "string" ? value : null;
+}
+
+function findComponent(component: Component, nodeId: string): Component | null {
+  if (componentNodeId(component) === nodeId) return component;
+  for (const child of component.components().models) {
+    const match = findComponent(child, nodeId);
+    if (match) return match;
+  }
+  return null;
+}
+
+export default function GrapeJSEditor({
+  document,
+  selectedNodeId,
+  onSelect,
+  onUpdate,
+}: GrapeJSEditorProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const editorRef = useRef<Editor | null>(null);
   const documentRef = useRef<EditorDocumentV1 | null>(null);
@@ -22,6 +43,8 @@ export default function GrapeJSEditor({ document, onUpdate }: GrapeJSEditorProps
   const lastEmittedRef = useRef("");
   const onUpdateRef = useRef(onUpdate);
   onUpdateRef.current = onUpdate;
+  const onSelectRef = useRef(onSelect);
+  onSelectRef.current = onSelect;
 
   const emitUpdate = useCallback(() => {
     const editor = editorRef.current;
@@ -53,10 +76,16 @@ export default function GrapeJSEditor({ document, onUpdate }: GrapeJSEditorProps
 
     editorRef.current = editor;
     editor.on("update", scheduleUpdate);
+    const handleSelection = (component: Component) => {
+      const nodeId = componentNodeId(component);
+      if (nodeId) onSelectRef.current(nodeId);
+    };
+    editor.on("component:selected", handleSelection);
 
     return () => {
       if (updateTimerRef.current !== null) window.clearTimeout(updateTimerRef.current);
       editor.off("update", scheduleUpdate);
+      editor.off("component:selected", handleSelection);
       editor.destroy();
       editorRef.current = null;
     };
@@ -80,6 +109,15 @@ export default function GrapeJSEditor({ document, onUpdate }: GrapeJSEditorProps
     );
     loadingRef.current = false;
   }, [document]);
+
+  useEffect(() => {
+    const editor = editorRef.current;
+    const wrapper = editor?.getWrapper();
+    if (!editor || !wrapper || !selectedNodeId) return;
+    if (componentNodeId(editor.getSelected()) === selectedNodeId) return;
+    const component = findComponent(wrapper, selectedNodeId);
+    if (component) editor.select(component);
+  }, [selectedNodeId, document]);
 
   return <div ref={containerRef} className="h-full w-full" />;
 }

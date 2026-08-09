@@ -39,6 +39,7 @@ A sleek, minimalist web application builder powered by AI (Gemini / OpenRouter).
 - Durable conversation checkpoints and generation-job history shared by every generation path
 - Named revision checkpoints, restore, and one-click project branching from any revision
 - Database-backed generation/authentication rate limits, idempotency keys, and owner-scoped audit events
+- A document-native visual workspace with stable selection, breadcrumbs, draggable layers, and a focused property inspector
 
 
 ## Setup
