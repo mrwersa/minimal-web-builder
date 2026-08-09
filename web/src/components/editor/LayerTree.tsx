@@ -1,3 +1,4 @@
+import { useRef } from "react";
 import { GripVertical } from "lucide-react";
 import type { EditorDocumentV1 } from "../../editor/document";
 import {
@@ -21,6 +22,14 @@ export default function LayerTree({
   onChange,
 }: LayerTreeProps) {
   const entries = elementEntries(document);
+  const itemRefs = useRef(new Map<string, HTMLButtonElement>());
+
+  const focusEntry = (index: number) => {
+    const entry = entries[index];
+    if (!entry) return;
+    onSelect(entry.node.id);
+    itemRefs.current.get(entry.node.id)?.focus();
+  };
 
   return (
     <div role="tree" aria-label="Page layers" className="space-y-0.5 p-2">
@@ -32,6 +41,16 @@ export default function LayerTree({
           key={node.id}
           role="treeitem"
           aria-selected={selectedNodeId === node.id}
+          aria-level={depth + 1}
+          tabIndex={
+            selectedNodeId === node.id || (!selectedNodeId && node.id === entries[0]?.node.id)
+              ? 0
+              : -1
+          }
+          ref={(element) => {
+            if (element) itemRefs.current.set(node.id, element);
+            else itemRefs.current.delete(node.id);
+          }}
           draggable
           onDragStart={(event) => {
             event.dataTransfer.effectAllowed = "move";
@@ -52,6 +71,35 @@ export default function LayerTree({
             }
           }}
           onClick={() => onSelect(node.id)}
+          onKeyDown={(event) => {
+            const index = entries.findIndex((entry) => entry.node.id === node.id);
+            if (event.key === "ArrowDown") {
+              event.preventDefault();
+              focusEntry(Math.min(index + 1, entries.length - 1));
+            } else if (event.key === "ArrowUp") {
+              event.preventDefault();
+              focusEntry(Math.max(index - 1, 0));
+            } else if (event.key === "Home") {
+              event.preventDefault();
+              focusEntry(0);
+            } else if (event.key === "End") {
+              event.preventDefault();
+              focusEntry(entries.length - 1);
+            } else if (
+              event.key === "ArrowRight" &&
+              entries[index + 1]?.depth > entries[index].depth
+            ) {
+              event.preventDefault();
+              focusEntry(index + 1);
+            } else if (event.key === "ArrowLeft" && entries[index].parentId) {
+              event.preventDefault();
+              focusEntry(
+                entries.findIndex(
+                  (entry) => entry.node.id === entries[index].parentId,
+                ),
+              );
+            }
+          }}
           className={cn(
             "flex w-full items-center gap-1 rounded px-1.5 py-1 text-left text-xs",
             selectedNodeId === node.id
