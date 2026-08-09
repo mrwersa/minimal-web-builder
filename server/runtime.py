@@ -64,6 +64,7 @@ def generate(
         provider=client.config.provider,
         api_key=client.config.openrouter_api_key or "",
         base_url=client.config.openrouter_base_url,
+        timeout_seconds=client.config.generation_timeout_seconds,
     )
 
 
@@ -96,4 +97,5 @@ def regenerate_section(
         provider=client.config.provider,
         api_key=client.config.openrouter_api_key or "",
         base_url=client.config.openrouter_base_url,
+        timeout_seconds=client.config.generation_timeout_seconds,
     )

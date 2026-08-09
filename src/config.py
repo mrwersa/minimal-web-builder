@@ -32,6 +32,8 @@ class AppConfig:
     )
     auth_rate_limit_per_minute: int = 10
     generation_rate_limit_per_minute: int = 30
+    generation_timeout_seconds: int = 120
+    generation_max_concurrency: int = 4
 
 
 def _float_env(name: str, default: float) -> float:
@@ -103,4 +105,6 @@ def load_config(dotenv_path: str | os.PathLike | None = None) -> AppConfig:
         generation_rate_limit_per_minute=max(
             1, _int_env("GENERATION_RATE_LIMIT_PER_MINUTE", 30)
         ),
+        generation_timeout_seconds=max(1, _int_env("GENERATION_TIMEOUT_SECONDS", 120)),
+        generation_max_concurrency=max(1, _int_env("GENERATION_MAX_CONCURRENCY", 4)),
     )

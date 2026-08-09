@@ -7,6 +7,7 @@ from fastapi.testclient import TestClient
 
 from server.assets import ReusableAssetService
 from server.auth import AuthService
+from server.concurrency import GenerationLimiter
 from server.controls import RequestControlService
 from server.database import Database
 from server.main import app
@@ -45,6 +46,7 @@ def client(monkeypatch: pytest.MonkeyPatch, tmp_path):
     app.state.assets = ReusableAssetService(database.sessions)
     app.state.orchestrator = GenerationOrchestrator(database.sessions)
     app.state.controls = RequestControlService(database.sessions)
+    app.state.generation_limiter = GenerationLimiter(cfg.generation_max_concurrency)
     test_client = TestClient(app)
     response = test_client.post(
         "/api/auth/register",
@@ -150,7 +152,42 @@ def test_generate_propagates_api_errors(
     r = client.post("/api/generate", json={"prompt": "x"})
     assert r.status_code == 502
     assert "boom" in r.json()["detail"]
-    assert client.get("/api/generation-jobs").json()["jobs"][0]["status"] == "failed"
+    job = client.get("/api/generation-jobs").json()["jobs"][0]
+    assert job["status"] == "failed"
+    assert job["failure_kind"] == "provider"
+    assert job["error"] == "API error: boom"
+
+
+def test_generation_job_stats_report_outcomes_and_latency(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(
+        "server.main.generate",
+        lambda *a, **k: "<!doctype html><html><body><h1>Hi</h1></body></html>",
+    )
+    assert (
+        client.post("/api/generate", json={"prompt": "a landing page"}).status_code
+        == 200
+    )
+    monkeypatch.setattr("server.main.generate", lambda *a, **k: "API error: boom")
+    assert (
+        client.post("/api/generate", json={"prompt": "another page"}).status_code == 502
+    )
+
+    stats = client.get("/api/generation-jobs/stats").json()
+
+    assert stats["totals"]["total"] == 2
+    assert stats["totals"]["succeeded"] == 1
+    assert stats["totals"]["failed"] == 1
+    assert stats["totals"]["success_rate"] == 0.5
+    assert stats["totals"]["p95_ms"] is not None
+    assert stats["failure_kinds"] == {"provider": 1}
+    assert [item["operation"] for item in stats["operations"]] == ["generate"]
+
+
+def test_generation_job_stats_require_authentication(client: TestClient) -> None:
+    client.post("/api/auth/logout")
+    assert client.get("/api/generation-jobs/stats").status_code == 401
 
 
 def test_generate_section_replaces_section(

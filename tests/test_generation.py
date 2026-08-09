@@ -3,6 +3,7 @@ from types import SimpleNamespace
 
 from src.generation import (
     BASE_PROMPT,
+    DEFAULT_GENERATION_TIMEOUT_SECONDS,
     build_generation_prompt,
     build_section_regeneration_prompt,
     call_gemini,
@@ -464,3 +465,78 @@ def test_section_prompt_refine_aspects_are_distinct() -> None:
     ]
 
     assert len(set(prompts)) == len(prompts)
+
+
+def test_call_gemini_openrouter_uses_the_configured_timeout(monkeypatch) -> None:
+    captured: dict = {}
+
+    def fake_urlopen(request, timeout=None):
+        captured["timeout"] = timeout
+        body = json.dumps({"choices": [{"message": {"content": "ok"}}]}).encode("utf-8")
+        return _FakeResponse(body)
+
+    monkeypatch.setattr("src.generation.urllib.request.urlopen", fake_urlopen)
+
+    call_gemini(
+        model="google/gemini-2.0-flash",
+        genai=None,
+        messages=[{"role": "user", "content": "hi"}],
+        temperature=0.3,
+        max_output_tokens=200,
+        provider="openrouter",
+        api_key="or-key",
+        timeout_seconds=7,
+    )
+
+    assert captured["timeout"] == 7
+
+
+def test_call_gemini_openrouter_defaults_the_timeout(monkeypatch) -> None:
+    captured: dict = {}
+
+    def fake_urlopen(request, timeout=None):
+        captured["timeout"] = timeout
+        body = json.dumps({"choices": [{"message": {"content": "ok"}}]}).encode("utf-8")
+        return _FakeResponse(body)
+
+    monkeypatch.setattr("src.generation.urllib.request.urlopen", fake_urlopen)
+
+    call_gemini(
+        model="google/gemini-2.0-flash",
+        genai=None,
+        messages=[{"role": "user", "content": "hi"}],
+        temperature=0.3,
+        max_output_tokens=200,
+        provider="openrouter",
+        api_key="or-key",
+    )
+
+    assert captured["timeout"] == DEFAULT_GENERATION_TIMEOUT_SECONDS
+
+
+def test_call_gemini_for_section_uses_the_configured_timeout(monkeypatch) -> None:
+    captured: dict = {}
+
+    def fake_urlopen(request, timeout=None):
+        captured["timeout"] = timeout
+        body = json.dumps({"choices": [{"message": {"content": "<hr>"}}]}).encode(
+            "utf-8"
+        )
+        return _FakeResponse(body)
+
+    monkeypatch.setattr("src.generation.urllib.request.urlopen", fake_urlopen)
+
+    call_gemini_for_section(
+        model="google/gemini-2.0-flash",
+        genai=None,
+        current_code="<html><body><main>x</main></body></html>",
+        section=_section(),
+        instructions="tighten it",
+        temperature=0.3,
+        max_output_tokens=200,
+        provider="openrouter",
+        api_key="or-key",
+        timeout_seconds=11,
+    )
+
+    assert captured["timeout"] == 11

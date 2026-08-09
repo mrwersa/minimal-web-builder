@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import math
+import time
 from collections.abc import Callable
 from typing import Any, TypeVar
 
@@ -15,9 +17,89 @@ from server.runtime import GenerationClient
 
 T = TypeVar("T", bound=dict[str, Any])
 
+#: Upper bound on jobs scanned when aggregating :meth:`job_stats`, so a long
+#: history cannot make the stats endpoint unboundedly expensive.
+STATS_WINDOW = 1000
+
+FAILURE_PROVIDER = "provider"
+FAILURE_TIMEOUT = "timeout"
+FAILURE_VALIDATION = "validation"
+FAILURE_INTERRUPTED = "interrupted"
+FAILURE_INTERNAL = "internal"
+
 
 class ConversationValidationError(ValueError):
     pass
+
+
+def _summarize(records: list[GenerationJobRecord]) -> dict[str, Any]:
+    succeeded = sum(1 for item in records if item.status == "succeeded")
+    failed = sum(1 for item in records if item.status == "failed")
+    running = sum(1 for item in records if item.status == "running")
+    # Latency is only meaningful for jobs that ran to completion; a failure can
+    # return in milliseconds and would otherwise flatter the percentiles.
+    durations = [
+        item.duration_ms
+        for item in records
+        if item.status == "succeeded" and item.duration_ms is not None
+    ]
+    settled = succeeded + failed
+    return {
+        "total": len(records),
+        "succeeded": succeeded,
+        "failed": failed,
+        "running": running,
+        "success_rate": round(succeeded / settled, 4) if settled else None,
+        "p50_ms": _percentile(durations, 50),
+        "p95_ms": _percentile(durations, 95),
+    }
+
+
+def classify_failure(exc: BaseException) -> str:
+    """Bucket a generation failure by cause.
+
+    The exit metric for Phase 3 is a failure *rate*, which is only actionable
+    when a provider outage can be told apart from a rejected document. Provider
+    errors reach us as an HTTP 502 raised by the route, because
+    ``src.generation`` converts provider exceptions into an ``API error:``
+    string rather than propagating them.
+    """
+    message = str(getattr(exc, "detail", None) or exc)
+    lowered = message.lower()
+    if "timed out" in lowered or "timeout" in lowered:
+        return FAILURE_TIMEOUT
+    status = getattr(exc, "status_code", None)
+    if status == 502 or lowered.startswith("api error:"):
+        return FAILURE_PROVIDER
+    if isinstance(exc, ValueError) or status == 400:
+        return FAILURE_VALIDATION
+    return FAILURE_INTERNAL
+
+
+def _result_metrics(result: Any) -> dict[str, int]:
+    """Summarize a generation result into counters worth trending over time."""
+    if not isinstance(result, dict):
+        return {}
+    notes = result.get("notes") or result.get("validation_notes") or []
+    return {
+        "output_chars": len(result.get("html") or ""),
+        "note_count": len(notes) if isinstance(notes, list) else 0,
+        "safety_alert_count": len(result.get("safety_alerts") or []),
+        "validation_error_count": len(result.get("validation_errors") or []),
+    }
+
+
+def _elapsed_ms(started: float) -> int:
+    return int((time.perf_counter() - started) * 1000)
+
+
+def _percentile(values: list[int], percentile: float) -> int | None:
+    """Nearest-rank percentile — exact for the small samples we aggregate."""
+    if not values:
+        return None
+    ordered = sorted(values)
+    rank = max(1, math.ceil(percentile / 100 * len(ordered)))
+    return ordered[min(rank, len(ordered)) - 1]
 
 
 def _thread_id(value: str) -> str:
@@ -52,12 +134,25 @@ class GenerationOrchestrator:
         conversation_id: str | None = None,
     ) -> T:
         job_id = self._start_job(owner_id, operation, request, conversation_id)
+        started = time.perf_counter()
         try:
             result = work()
         except Exception as exc:
-            self._finish_job(job_id, status="failed", error=str(exc))
+            self._finish_job(
+                job_id,
+                status="failed",
+                error=str(getattr(exc, "detail", None) or exc),
+                failure_kind=classify_failure(exc),
+                duration_ms=_elapsed_ms(started),
+            )
             raise
-        self._finish_job(job_id, status="succeeded", result=result)
+        self._finish_job(
+            job_id,
+            status="succeeded",
+            result=result,
+            duration_ms=_elapsed_ms(started),
+            metrics=_result_metrics(result),
+        )
         return result
 
     def recover_interrupted_jobs(self) -> int:
@@ -69,6 +164,8 @@ class GenerationOrchestrator:
                 .values(
                     status="failed",
                     error="Generation interrupted by server restart",
+                    failure_kind=FAILURE_INTERRUPTED,
+                    finished_at=utcnow(),
                     updated_at=utcnow(),
                 )
             )
@@ -202,9 +299,48 @@ class GenerationOrchestrator:
                     "operation": item.operation,
                     "status": item.status,
                     "error": item.error,
+                    "failure_kind": item.failure_kind,
+                    "duration_ms": item.duration_ms,
+                    "metrics": item.metrics,
                 }
                 for item in records
             ]
+
+    def job_stats(self, owner_id: str) -> dict[str, Any]:
+        """Aggregate outcome and latency metrics over this owner's recent jobs.
+
+        Reported per operation as well as overall, because the Phase 3 latency
+        targets are provider- and operation-specific: a section regeneration and
+        a full-page generation are not comparable.
+        """
+        with self._sessions() as session:
+            records = list(
+                session.scalars(
+                    select(GenerationJobRecord)
+                    .where(GenerationJobRecord.owner_id == owner_id)
+                    .order_by(GenerationJobRecord.created_at.desc())
+                    .limit(STATS_WINDOW)
+                )
+            )
+
+        by_operation: dict[str, list[GenerationJobRecord]] = {}
+        failure_kinds: dict[str, int] = {}
+        for item in records:
+            by_operation.setdefault(item.operation, []).append(item)
+            if item.failure_kind:
+                failure_kinds[item.failure_kind] = (
+                    failure_kinds.get(item.failure_kind, 0) + 1
+                )
+
+        return {
+            "window": STATS_WINDOW,
+            "totals": _summarize(records),
+            "operations": [
+                {"operation": operation, **_summarize(items)}
+                for operation, items in sorted(by_operation.items())
+            ],
+            "failure_kinds": failure_kinds,
+        }
 
     def _get_or_create_conversation(
         self, owner_id: str, thread_id: str
@@ -268,14 +404,22 @@ class GenerationOrchestrator:
         status: str,
         result: dict[str, Any] | None = None,
         error: str | None = None,
+        failure_kind: str | None = None,
+        duration_ms: int | None = None,
+        metrics: dict[str, int] | None = None,
     ) -> None:
         with self._sessions.begin() as session:
             job = session.get(GenerationJobRecord, job_id)
             if job is not None:
+                now = utcnow()
                 job.status = status
                 job.result = result
                 job.error = error
-                job.updated_at = utcnow()
+                job.failure_kind = failure_kind
+                job.duration_ms = duration_ms
+                job.metrics = metrics
+                job.finished_at = now
+                job.updated_at = now
 
     @staticmethod
     def _last_assistant_message(messages: list[dict[str, str]]) -> str:

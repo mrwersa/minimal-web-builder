@@ -167,3 +167,47 @@ def test_regenerate_section_forwards_client_config(monkeypatch) -> None:
     assert captured["provider"] == GEMINI_PROVIDER
     assert captured["api_key"] == "or-key"
     assert captured["base_url"] == "https://proxy.example/v1"
+
+
+def test_generate_forwards_the_configured_timeout(monkeypatch) -> None:
+    captured: dict[str, Any] = {}
+    monkeypatch.setattr(
+        runtime, "call_gemini", lambda **kwargs: captured.update(kwargs) or ""
+    )
+    client = runtime.GenerationClient(
+        config=replace(_CONFIG, generation_timeout_seconds=9), model="m", genai=None
+    )
+
+    runtime.generate(
+        client,
+        messages=[],
+        tone_key="minimal",
+        strict_minimal=False,
+        complexity_key="balanced",
+    )
+
+    assert captured["timeout_seconds"] == 9
+
+
+def test_regenerate_section_forwards_the_configured_timeout(monkeypatch) -> None:
+    captured: dict[str, Any] = {}
+    monkeypatch.setattr(
+        runtime,
+        "call_gemini_for_section",
+        lambda **kwargs: captured.update(kwargs) or "",
+    )
+    client = runtime.GenerationClient(
+        config=replace(_CONFIG, generation_timeout_seconds=13), model="m", genai=None
+    )
+
+    runtime.regenerate_section(
+        client,
+        current_code="<html></html>",
+        section=object(),
+        instructions="",
+        tone_key="minimal",
+        strict_minimal=False,
+        complexity_key="balanced",
+    )
+
+    assert captured["timeout_seconds"] == 13
