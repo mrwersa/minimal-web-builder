@@ -314,7 +314,7 @@ export function compileDocument(
     document.doctype,
     `<html${serializeAttributes(document.htmlAttributes)}>`,
     `<head>${headItems.join("\n")}</head>`,
-    `<body${serializeAttributes(document.bodyAttributes)}>${bodyItems.join("\n")}</body></html>`,
+    `<body${serializeAttributes(document.bodyAttributes)}>${bodyItems.join("")}</body></html>`,
   ].join("\n");
 }
 

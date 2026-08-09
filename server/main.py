@@ -63,7 +63,6 @@ from src.profiles import (
 from src.safety import apply_output_safety_policy
 from src.sections import extract_first_top_level, extract_sections, replace_section
 from src.theme import (
-    COLORS,
     COMPLEXITY_BY_KEY,
     REFINE_ASPECTS,
     TONE_PRESETS_BY_KEY,
@@ -252,7 +251,6 @@ async def options() -> dict[str, Any]:
         "refine_aspects": [{"key": a.key, "label": a.label} for a in REFINE_ASPECTS],
         "sections": [{"key": s.key, "label": s.label} for s in SECTION_OPTIONS],
         "color_limits": [{"key": c.key, "label": c.label} for c in COLOR_LIMITS],
-        "tokens": COLORS,
     }
 
 

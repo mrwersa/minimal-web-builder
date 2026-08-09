@@ -74,7 +74,7 @@ Exit metrics:
 - ✅ No cross-user access to projects or reusable assets.
 - ✅ Mutating API operations are idempotent where appropriate.
 
-## Phase 2: A trustworthy visual editor 🔄
+## Phase 2: A trustworthy visual editor ✅
 
 Goal: common changes are faster by direct manipulation than by prompting.
 
@@ -89,10 +89,10 @@ Goal: common changes are faster by direct manipulation than by prompting.
 
 Exit metrics:
 
-- No document loss after repeated edit/preview/export round trips.
-- Undo/redo works across both AI and manual edits.
-- A typical direct edit takes fewer than three interactions.
-- Responsive problems can be fixed without regenerating the page.
+- ✅ No document loss after repeated edit/preview/export round trips.
+- ✅ Undo/redo works across both AI and manual edits.
+- ✅ A typical direct edit takes fewer than three interactions.
+- ✅ Responsive problems can be fixed without regenerating the page.
 
 ## Phase 3: Reliable AI generation ⬜
 

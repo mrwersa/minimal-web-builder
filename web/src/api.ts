@@ -8,7 +8,6 @@ export interface OptionsResponse {
   refine_aspects: { key: string; label: string }[];
   sections: { key: string; label: string }[];
   color_limits: { key: string; label: string }[];
-  tokens: Record<string, string>;
 }
 
 export interface User {

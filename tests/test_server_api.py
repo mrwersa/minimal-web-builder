@@ -78,12 +78,10 @@ def test_options_shape(client: TestClient) -> None:
         "refine_aspects",
         "sections",
         "color_limits",
-        "tokens",
     ):
         assert key in j
     assert j["custom_profile_id"] == "custom"
     assert any(t["key"] == "minimal" for t in j["tones"])
-    assert "accent" in j["tokens"]
 
 
 def test_sections_listing(client: TestClient) -> None:

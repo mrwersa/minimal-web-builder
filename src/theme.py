@@ -162,22 +162,6 @@ REFINE_ASPECTS_BY_KEY: dict[str, RefineAspect] = {a.key: a for a in REFINE_ASPEC
 
 DEFAULT_REFINE_ASPECT_KEY = "general"
 
-# Shared UI design tokens (Streamlit theme consistency).
-COLORS = {
-    "bg": "#f7f9fb",
-    "surface": "#ffffff",
-    "border": "#e3e8ee",
-    "text": "#222222",
-    "muted": "#78909c",
-    "accent": "#1976d2",
-    "accent_soft": "#e3f2fd",
-    "disabled": "#b0b8c1",
-}
-
-SPACING = {"xs": 4, "sm": 8, "md": 16, "lg": 24, "xl": 32}
-
-TYPE_SCALE = {"sm": 13, "base": 14, "lg": 16, "xl": 20, "xxl": 28}
-
 
 def tone_options() -> list[str]:
     return [t.key for t in TONE_PRESETS]
