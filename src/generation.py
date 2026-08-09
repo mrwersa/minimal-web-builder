@@ -26,17 +26,17 @@ DEFAULT_GENERATION_TIMEOUT_SECONDS = 120
 DEFAULT_GENERATION_MAX_ATTEMPTS = 1
 DEFAULT_RETRY_BACKOFF_SECONDS = 0.5
 
-#: Substrings that mark a provider failure as permanent. Retrying a rejected
-#: credential only multiplies the latency of a request that cannot succeed.
-_PERMANENT_ERROR_MARKERS = (
-    "401",
-    "403",
-    "unauthorized",
-    "forbidden",
-    "invalid api key",
-    "invalid_api_key",
-    "api key not valid",
-    "api_key_invalid",
+#: Marks a provider failure as permanent. Retrying a rejected credential only
+#: multiplies the latency of a request that cannot succeed. The status codes are
+#: word-bounded so an unrelated number ("failed after 4013ms") is not mistaken
+#: for an auth failure and denied its retries.
+_PERMANENT_ERROR_RE = re.compile(
+    r"\b(?:401|403)\b"
+    r"|unauthorized"
+    r"|forbidden"
+    r"|invalid[ _-]?api[ _-]?key"
+    r"|api[ _-]?key[ _-]?(?:not[ _-]?valid|invalid)",
+    re.IGNORECASE,
 )
 
 
@@ -49,9 +49,7 @@ class ProviderError(RuntimeError):
 
     def __init__(self, message: str) -> None:
         super().__init__(message)
-        self.retryable = not any(
-            marker in message.lower() for marker in _PERMANENT_ERROR_MARKERS
-        )
+        self.retryable = _PERMANENT_ERROR_RE.search(message) is None
 
 
 BASE_PROMPT = (

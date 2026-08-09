@@ -648,4 +648,12 @@ def test_permanent_and_transient_errors_are_classified() -> None:
     assert ProviderError("HTTP 503 Service Unavailable").retryable is True
     assert ProviderError("<urlopen error timed out>").retryable is True
     assert ProviderError("HTTP 401 Unauthorized").retryable is False
+    assert ProviderError("HTTP 403 Forbidden").retryable is False
     assert ProviderError("API key not valid").retryable is False
+    assert ProviderError("invalid_api_key").retryable is False
+
+
+def test_status_codes_are_word_bounded_when_classifying() -> None:
+    """A number that merely contains 401 must not cost a transient error its retries."""
+    assert ProviderError("HTTP 500 Server Error after 4013ms").retryable is True
+    assert ProviderError("upstream returned 5031 bytes").retryable is True
