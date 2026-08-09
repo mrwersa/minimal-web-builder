@@ -85,7 +85,7 @@ Goal: common changes are faster by direct manipulation than by prompting.
 - ✅ Add global design tokens for color, type, spacing, radius, and container width.
 - ✅ Add element-scoped AI commands using stable node IDs.
 - ✅ Add accessible keyboard navigation, shortcuts, and a command palette.
-- Preserve custom CSS and JavaScript through explicit advanced escape hatches.
+- ✅ Preserve custom CSS and JavaScript through explicit advanced escape hatches.
 
 Exit metrics:
 

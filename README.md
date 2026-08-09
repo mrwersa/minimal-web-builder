@@ -44,6 +44,7 @@ A sleek, minimalist web application builder powered by AI (Gemini / OpenRouter).
 - Global color, typography, spacing, radius, and container tokens that can be reused across element styles
 - Element-scoped AI editing that uses stable node IDs and applies only the generated target subtree
 - Keyboard-navigable layers, document shortcuts, and a searchable accessible command palette
+- Explicit, undoable advanced editors for head markup, custom CSS, and sandboxed body scripts
 
 
 ## Setup
