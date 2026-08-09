@@ -1,75 +1,23 @@
 import { useCallback, useEffect, useRef } from "react";
 import grapesjs, { type Editor } from "grapesjs";
 import "grapesjs/dist/css/grapes.min.css";
+import {
+  compileCanvas,
+  compileDocument,
+  parseEditorDocument,
+  replaceCanvas,
+  type EditorDocumentV1,
+} from "../editor/document";
 
 interface GrapeJSEditorProps {
   html: string;
   onUpdate: (html: string) => void;
 }
 
-export interface DocumentParts {
-  doctype: string;
-  htmlAttributes: string;
-  headHtml: string;
-  bodyAttributes: string;
-  bodyHtml: string;
-  bodyScripts: string[];
-  css: string;
-}
-
-function serializeAttributes(element: Element): string {
-  return Array.from(element.attributes)
-    .map(({ name, value }) => ` ${name}="${value.replaceAll("&", "&amp;").replaceAll('"', "&quot;")}"`)
-    .join("");
-}
-
-/** Split a complete document into canvas-editable and preserved parts. */
-export function parseDocument(html: string): DocumentParts {
-  const parser = new DOMParser();
-  const doc = parser.parseFromString(html, "text/html");
-  const head = doc.head.cloneNode(true) as HTMLHeadElement;
-  const body = doc.body.cloneNode(true) as HTMLBodyElement;
-  const css = Array.from(doc.querySelectorAll("style"))
-    .map((style) => style.textContent ?? "")
-    .filter(Boolean)
-    .join("\n\n");
-  const bodyScripts = Array.from(body.querySelectorAll("script")).map((script) => script.outerHTML);
-
-  head.querySelectorAll("style").forEach((style) => style.remove());
-  body.querySelectorAll("style, script").forEach((element) => element.remove());
-
-  return {
-    doctype: html.match(/<!doctype[^>]*>/i)?.[0] ?? "<!DOCTYPE html>",
-    htmlAttributes: serializeAttributes(doc.documentElement),
-    headHtml: head.innerHTML.trim(),
-    bodyAttributes: serializeAttributes(doc.body),
-    bodyHtml: body.innerHTML.trim(),
-    bodyScripts,
-    css,
-  };
-}
-
-/** Rebuild the complete export document without dropping metadata or scripts. */
-export function buildDocument(parts: DocumentParts, bodyHtml: string, css: string): string {
-  const headItems = [parts.headHtml, css.trim() ? `<style>\n${css.trim()}\n</style>` : ""].filter(Boolean);
-  const bodyItems = [bodyHtml.trim(), ...parts.bodyScripts].filter(Boolean);
-  return [
-    parts.doctype,
-    `<html${parts.htmlAttributes}>`,
-    "<head>",
-    headItems.join("\n"),
-    "</head>",
-    `<body${parts.bodyAttributes}>`,
-    bodyItems.join("\n"),
-    "</body>",
-    "</html>",
-  ].join("\n");
-}
-
 export default function GrapeJSEditor({ html, onUpdate }: GrapeJSEditorProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const editorRef = useRef<Editor | null>(null);
-  const documentPartsRef = useRef<DocumentParts | null>(null);
+  const documentRef = useRef<EditorDocumentV1 | null>(null);
   const loadingRef = useRef(false);
   const updateTimerRef = useRef<number | null>(null);
   const lastEmittedRef = useRef("");
@@ -78,12 +26,14 @@ export default function GrapeJSEditor({ html, onUpdate }: GrapeJSEditorProps) {
 
   const emitUpdate = useCallback(() => {
     const editor = editorRef.current;
-    const parts = documentPartsRef.current;
-    if (!editor || !parts || loadingRef.current) return;
-    const nextDocument = buildDocument(parts, editor.getHtml(), editor.getCss() ?? "");
-    if (nextDocument === lastEmittedRef.current) return;
-    lastEmittedRef.current = nextDocument;
-    onUpdateRef.current(nextDocument);
+    const document = documentRef.current;
+    if (!editor || !document || loadingRef.current) return;
+    const nextDocument = replaceCanvas(document, editor.getHtml(), editor.getCss() ?? "");
+    const nextHtml = compileDocument(nextDocument);
+    if (nextHtml === lastEmittedRef.current) return;
+    documentRef.current = nextDocument;
+    lastEmittedRef.current = nextHtml;
+    onUpdateRef.current(nextHtml);
   }, []);
 
   const scheduleUpdate = useCallback(() => {
@@ -117,16 +67,18 @@ export default function GrapeJSEditor({ html, onUpdate }: GrapeJSEditorProps) {
     const editor = editorRef.current;
     if (!editor || !html || html === lastEmittedRef.current) return;
 
-    const parts = parseDocument(html);
+    const document = parseEditorDocument(html);
     loadingRef.current = true;
-    documentPartsRef.current = parts;
+    documentRef.current = document;
     editor.DomComponents.clear();
     editor.CssComposer.clear();
-    editor.setComponents(parts.bodyHtml);
-    editor.setStyle(parts.css);
+    editor.setComponents(compileCanvas(document));
+    editor.setStyle(document.css);
     // GrapesJS normalizes markup while loading. Treat that normalized document as
     // the baseline so merely opening the editor does not create a revision.
-    lastEmittedRef.current = buildDocument(parts, editor.getHtml(), editor.getCss() ?? "");
+    lastEmittedRef.current = compileDocument(
+      replaceCanvas(document, editor.getHtml(), editor.getCss() ?? ""),
+    );
     loadingRef.current = false;
   }, [html]);
 
