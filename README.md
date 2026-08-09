@@ -47,6 +47,7 @@ A sleek, minimalist web application builder powered by AI (Gemini / OpenRouter).
 - Explicit, undoable advanced editors for head markup, custom CSS, and sandboxed body scripts
 - Durable per-generation latency, outcome, and failure-cause metrics with a queryable success-rate and P50/P95 summary
 - Configurable provider timeouts and a bounded generation concurrency limit
+- Automatic retry with jittered exponential backoff for transient provider failures, skipped for permanent ones and bounded by an overall deadline
 
 
 ## Setup
@@ -85,6 +86,10 @@ A sleek, minimalist web application builder powered by AI (Gemini / OpenRouter).
    `GENERATION_RATE_LIMIT_PER_MINUTE`. `GENERATION_TIMEOUT_SECONDS` (default
    120) bounds a single provider call and `GENERATION_MAX_CONCURRENCY`
    (default 4) bounds how many generations run at once.
+   `GENERATION_MAX_ATTEMPTS` (default 3) and `GENERATION_RETRY_BACKOFF_SECONDS`
+   (default 0.5) control retries for transient provider failures, and
+   `GENERATION_TOTAL_TIMEOUT_SECONDS` (default 300) caps one generation
+   including its retries.
 
 For a single-process production build, run `cd web && npm run build` then
 `uvicorn server.main:app --port 8000` and open http://localhost:8000/.

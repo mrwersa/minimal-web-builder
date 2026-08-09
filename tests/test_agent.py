@@ -252,3 +252,36 @@ def test_run_agent_routes_to_error_fallback_on_persistent_failure(
 def test_graph_can_be_built_and_compiled() -> None:
     graph = build_graph()
     assert graph is not None
+
+
+def test_route_validation_does_not_retry_exhausted_provider_errors() -> None:
+    """The provider layer already retried; re-running would multiply attempts."""
+    state = {"validation_errors": ["API error: boom"], "retry_count": 0}
+    assert _route_validation(state) == "error_fallback"  # type: ignore[arg-type]
+
+
+def test_route_validation_still_retries_guardrail_failures() -> None:
+    state = {"validation_errors": ["Missing <body>"], "retry_count": 0}
+    assert _route_validation(state) == "retry"  # type: ignore[arg-type]
+
+
+def test_run_agent_calls_the_provider_once_for_a_persistent_provider_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    set_client(_mock_client())
+    calls = {"count": 0}
+
+    def failing(*args, **kwargs):
+        calls["count"] += 1
+        return "API error: boom"
+
+    monkeypatch.setattr("server.agent.generate", failing)
+
+    run_agent(
+        "Create a landing page for a coffee shop",
+        thread_id="test-single-attempt",
+        current_code=None,
+        settings={},
+    )
+
+    assert calls["count"] == 1

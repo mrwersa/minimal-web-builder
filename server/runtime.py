@@ -65,6 +65,9 @@ def generate(
         api_key=client.config.openrouter_api_key or "",
         base_url=client.config.openrouter_base_url,
         timeout_seconds=client.config.generation_timeout_seconds,
+        max_attempts=client.config.generation_max_attempts,
+        retry_backoff_seconds=client.config.generation_retry_backoff_seconds,
+        total_timeout_seconds=client.config.generation_total_timeout_seconds,
     )
 
 
@@ -98,4 +101,7 @@ def regenerate_section(
         api_key=client.config.openrouter_api_key or "",
         base_url=client.config.openrouter_base_url,
         timeout_seconds=client.config.generation_timeout_seconds,
+        max_attempts=client.config.generation_max_attempts,
+        retry_backoff_seconds=client.config.generation_retry_backoff_seconds,
+        total_timeout_seconds=client.config.generation_total_timeout_seconds,
     )

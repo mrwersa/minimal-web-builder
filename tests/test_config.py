@@ -182,3 +182,52 @@ def test_load_config_clamps_nonpositive_generation_limits(monkeypatch) -> None:
 
     assert cfg.generation_timeout_seconds == 1
     assert cfg.generation_max_concurrency == 1
+
+
+def test_load_config_reads_generation_retry_settings(monkeypatch) -> None:
+    monkeypatch.setenv("GENERATION_MAX_ATTEMPTS", "5")
+    monkeypatch.setenv("GENERATION_RETRY_BACKOFF_SECONDS", "0.25")
+
+    cfg = load_config(dotenv_path=_NO_DOTENV)
+
+    assert cfg.generation_max_attempts == 5
+    assert cfg.generation_retry_backoff_seconds == 0.25
+
+
+def test_load_config_generation_retry_defaults(monkeypatch) -> None:
+    monkeypatch.delenv("GENERATION_MAX_ATTEMPTS", raising=False)
+    monkeypatch.delenv("GENERATION_RETRY_BACKOFF_SECONDS", raising=False)
+
+    cfg = load_config(dotenv_path=_NO_DOTENV)
+
+    assert cfg.generation_max_attempts == 3
+    assert cfg.generation_retry_backoff_seconds == 0.5
+
+
+def test_load_config_clamps_invalid_retry_settings(monkeypatch) -> None:
+    monkeypatch.setenv("GENERATION_MAX_ATTEMPTS", "0")
+    monkeypatch.setenv("GENERATION_RETRY_BACKOFF_SECONDS", "-1")
+
+    cfg = load_config(dotenv_path=_NO_DOTENV)
+
+    assert cfg.generation_max_attempts == 1
+    assert cfg.generation_retry_backoff_seconds == 0.0
+
+
+def test_load_config_clamps_absurd_attempt_counts(monkeypatch) -> None:
+    """A mistyped attempt count must not pin a worker thread for many minutes."""
+    monkeypatch.setenv("GENERATION_MAX_ATTEMPTS", "500")
+
+    assert load_config(dotenv_path=_NO_DOTENV).generation_max_attempts == 10
+
+
+def test_load_config_reads_total_generation_timeout(monkeypatch) -> None:
+    monkeypatch.setenv("GENERATION_TOTAL_TIMEOUT_SECONDS", "90")
+
+    assert load_config(dotenv_path=_NO_DOTENV).generation_total_timeout_seconds == 90
+
+
+def test_load_config_total_generation_timeout_default(monkeypatch) -> None:
+    monkeypatch.delenv("GENERATION_TOTAL_TIMEOUT_SECONDS", raising=False)
+
+    assert load_config(dotenv_path=_NO_DOTENV).generation_total_timeout_seconds == 300

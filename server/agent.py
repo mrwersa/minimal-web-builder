@@ -198,6 +198,13 @@ def _route_validation(state: BuilderState) -> str:
     if not errors:
         return "apply"
 
+    # ``src.generation`` already retried transient provider failures and gave up,
+    # so re-running this node would multiply attempts (and the provider timeout)
+    # instead of adding resilience. Only guardrail failures are worth another
+    # generation, because those depend on what the model happened to return.
+    if any(error.startswith("API error:") for error in errors):
+        return "error_fallback"
+
     retry_count = state.get("retry_count", 0)
     if retry_count >= MAX_RETRIES:
         return "error_fallback"

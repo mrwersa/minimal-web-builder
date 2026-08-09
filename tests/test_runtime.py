@@ -211,3 +211,74 @@ def test_regenerate_section_forwards_the_configured_timeout(monkeypatch) -> None
     )
 
     assert captured["timeout_seconds"] == 13
+
+
+def test_generate_forwards_the_configured_retry_policy(monkeypatch) -> None:
+    captured: dict[str, Any] = {}
+    monkeypatch.setattr(
+        runtime, "call_gemini", lambda **kwargs: captured.update(kwargs) or ""
+    )
+    client = runtime.GenerationClient(
+        config=replace(
+            _CONFIG, generation_max_attempts=4, generation_retry_backoff_seconds=0.25
+        ),
+        model="m",
+        genai=None,
+    )
+
+    runtime.generate(
+        client,
+        messages=[],
+        tone_key="minimal",
+        strict_minimal=False,
+        complexity_key="balanced",
+    )
+
+    assert captured["max_attempts"] == 4
+    assert captured["retry_backoff_seconds"] == 0.25
+
+
+def test_regenerate_section_forwards_the_configured_retry_policy(monkeypatch) -> None:
+    captured: dict[str, Any] = {}
+    monkeypatch.setattr(
+        runtime,
+        "call_gemini_for_section",
+        lambda **kwargs: captured.update(kwargs) or "",
+    )
+    client = runtime.GenerationClient(
+        config=replace(_CONFIG, generation_max_attempts=2), model="m", genai=None
+    )
+
+    runtime.regenerate_section(
+        client,
+        current_code="<html></html>",
+        section=object(),
+        instructions="",
+        tone_key="minimal",
+        strict_minimal=False,
+        complexity_key="balanced",
+    )
+
+    assert captured["max_attempts"] == 2
+
+
+def test_generate_forwards_the_total_timeout(monkeypatch) -> None:
+    captured: dict[str, Any] = {}
+    monkeypatch.setattr(
+        runtime, "call_gemini", lambda **kwargs: captured.update(kwargs) or ""
+    )
+    client = runtime.GenerationClient(
+        config=replace(_CONFIG, generation_total_timeout_seconds=210),
+        model="m",
+        genai=None,
+    )
+
+    runtime.generate(
+        client,
+        messages=[],
+        tone_key="minimal",
+        strict_minimal=False,
+        complexity_key="balanced",
+    )
+
+    assert captured["total_timeout_seconds"] == 210
