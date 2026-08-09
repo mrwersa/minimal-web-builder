@@ -1,3 +1,5 @@
+import type { EditorDocumentV1 } from "./editor/document";
+
 export interface OptionsResponse {
   profiles: { id: string; label: string; description: string }[];
   custom_profile_id: string;
@@ -44,6 +46,7 @@ export interface PageSnapshot {
   version: number;
   current_revision_id: string | null;
   html: string;
+  document: EditorDocumentV1 | null;
   created_at: string;
   updated_at: string;
 }
@@ -209,10 +212,14 @@ export async function fetchProjects(search = ""): Promise<ProjectSummary[]> {
   return result.projects;
 }
 
-export async function createProject(name: string, html: string): Promise<ProjectSnapshot> {
+export async function createProject(
+  name: string,
+  html: string,
+  document?: EditorDocumentV1 | null,
+): Promise<ProjectSnapshot> {
   return requestJson(
     "/api/projects",
-    jsonRequest("POST", { name, html }),
+    jsonRequest("POST", { name, html, document }),
     "Unable to create project",
   );
 }
@@ -260,10 +267,11 @@ export async function savePage(
   html: string,
   expectedVersion: number,
   source = "autosave",
+  document?: EditorDocumentV1 | null,
 ): Promise<PageSnapshot> {
   const r = await fetch(
     `/api/pages/${encodeURIComponent(pageId)}/document`,
-    jsonRequest("PUT", { html, expected_version: expectedVersion, source }),
+    jsonRequest("PUT", { html, document, expected_version: expectedVersion, source }),
   );
   return readPageResponse(r, expectedVersion, "Unable to save page");
 }
@@ -390,6 +398,7 @@ export interface ConversationSnapshot {
   thread_id: string;
   messages: ChatMessage[];
   current_code: string | null;
+  document: EditorDocumentV1 | null;
 }
 
 export async function fetchConversation(
@@ -403,10 +412,11 @@ export async function fetchConversation(
 export async function saveConversationDocument(
   threadId: string,
   code: string,
+  document?: EditorDocumentV1 | null,
 ): Promise<void> {
   await requestJson(
     `/api/conversations/${encodeURIComponent(threadId)}/document`,
-    jsonRequest("PUT", { code }),
+    jsonRequest("PUT", { code, document }),
     "Unable to save draft",
   );
 }

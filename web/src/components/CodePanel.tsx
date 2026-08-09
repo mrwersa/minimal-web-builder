@@ -1,11 +1,16 @@
 import { useState } from "react";
 import { Download, FileCode2, FileText, FileType2 } from "lucide-react";
 import { exportPage } from "../api";
+import { compileDocument } from "../editor/document";
 import { useStore } from "../store";
 import { Button } from "./ui/Button";
 
 export default function CodePanel() {
   const code = useStore((s) => s.code);
+  const editorDocument = useStore((s) => s.editorDocument);
+  const portableCode = editorDocument
+    ? compileDocument(editorDocument, { includeEditorIds: false })
+    : code;
   const [mode, setMode] = useState<"single" | "split">("single");
   const [files, setFiles] = useState<Record<string, string> | null>(null);
 
@@ -19,8 +24,8 @@ export default function CodePanel() {
   }
 
   async function runExport() {
-    if (!code) return;
-    const res = await exportPage(code, mode);
+    if (!portableCode) return;
+    const res = await exportPage(portableCode, mode);
     setFiles(res.files);
   }
 
@@ -80,7 +85,7 @@ export default function CodePanel() {
       )}
 
       <pre className="code flex-1 overflow-auto rounded-xl border border-border2 bg-surface p-4 text-text2">
-        {code}
+        {portableCode}
       </pre>
     </div>
   );

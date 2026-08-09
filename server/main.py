@@ -32,6 +32,7 @@ from server.content import DocumentValidationError, validate_document
 from server.control_routes import router as control_router
 from server.controls import IdempotencyConflictError, RequestControlService
 from server.database import Database
+from server.documents import EditorDocumentValidationError
 from server.mutations import run_idempotent
 from server.orchestrator import ConversationValidationError, GenerationOrchestrator
 from server.project_routes import router as project_router
@@ -137,6 +138,7 @@ async def reusable_asset_not_found_handler(
 
 @app.exception_handler(ReusableAssetValidationError)
 @app.exception_handler(DocumentValidationError)
+@app.exception_handler(EditorDocumentValidationError)
 @app.exception_handler(ConversationValidationError)
 async def content_validation_handler(
     _request: Request, exc: ValueError
@@ -429,6 +431,7 @@ class SectionsRequest(BaseModel):
 
 class ConversationDocumentRequest(BaseModel):
     code: str
+    document: dict[str, Any] | None = None
 
 
 @app.put("/api/conversations/{thread_id}/document")
@@ -443,8 +446,10 @@ async def conversation_document_update(
         request,
         principal,
         "conversation.document",
-        {"thread_id": thread_id, "code": code},
-        lambda: _orchestrator().update_document(principal.id, thread_id, code),
+        {"thread_id": thread_id, **body.model_dump()},
+        lambda: _orchestrator().update_document(
+            principal.id, thread_id, code, body.document
+        ),
     )
 
 

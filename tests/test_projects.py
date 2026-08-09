@@ -9,6 +9,7 @@ from server.projects import (
     ProjectValidationError,
     VersionConflictError,
 )
+from tests.editor_document import editor_document
 
 OWNER_ID = "00000000-0000-0000-0000-000000000010"
 
@@ -50,13 +51,20 @@ def test_project_survives_service_restart(tmp_path) -> None:
     first_database = Database.from_url(url)
     _add_owner(first_database)
     first = ProjectService(first_database.sessions)
-    created = first.create_project(OWNER_ID, "Persistent", "<main>saved</main>")
+    document = editor_document()
+    created = first.create_project(
+        OWNER_ID, "Persistent", "<main>saved</main>", document
+    )
 
     restarted_database = Database.from_url(url)
     restarted = ProjectService(restarted_database.sessions)
 
     assert restarted.get_project(OWNER_ID, created["id"])["pages"][0]["html"] == (
         "<main>saved</main>"
+    )
+    assert (
+        restarted.get_project(OWNER_ID, created["id"])["pages"][0]["document"]
+        == document
     )
     first_database.close()
     restarted_database.close()
@@ -198,3 +206,40 @@ def test_named_checkpoint_and_duplicate_from_revision(
     assert duplicate["name"] == "Launch branch"
     assert duplicate["pages"][0]["html"] == "v2"
     assert duplicate["pages"][0]["version"] == 1
+
+
+def test_structured_document_survives_revision_workflows(
+    projects: ProjectService,
+) -> None:
+    first_document = editor_document("hero-v1")
+    created = projects.create_project(
+        OWNER_ID,
+        "Structured",
+        "<main>v1</main>",
+        first_document,
+    )
+    page = created["pages"][0]
+    second_document = editor_document("hero-v2")
+
+    saved = projects.save_page(
+        OWNER_ID,
+        page["id"],
+        "<main>v2</main>",
+        expected_version=1,
+        document=second_document,
+    )
+    checkpoint = projects.create_checkpoint(
+        OWNER_ID, page["id"], "Structured checkpoint", expected_version=2
+    )
+    checkpoint_revision = projects.list_revisions(OWNER_ID, page["id"])[0]
+    duplicate = projects.duplicate_from_revision(
+        OWNER_ID,
+        page["id"],
+        checkpoint_revision["id"],
+        name="Structured branch",
+    )
+
+    assert created["pages"][0]["document"] == first_document
+    assert saved["document"] == second_document
+    assert checkpoint["document"] == second_document
+    assert duplicate["pages"][0]["document"] == second_document

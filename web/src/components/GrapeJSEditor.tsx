@@ -4,17 +4,16 @@ import "grapesjs/dist/css/grapes.min.css";
 import {
   compileCanvas,
   compileDocument,
-  parseEditorDocument,
   replaceCanvas,
   type EditorDocumentV1,
 } from "../editor/document";
 
 interface GrapeJSEditorProps {
-  html: string;
-  onUpdate: (html: string) => void;
+  document: EditorDocumentV1;
+  onUpdate: (document: EditorDocumentV1) => void;
 }
 
-export default function GrapeJSEditor({ html, onUpdate }: GrapeJSEditorProps) {
+export default function GrapeJSEditor({ document, onUpdate }: GrapeJSEditorProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const editorRef = useRef<Editor | null>(null);
   const documentRef = useRef<EditorDocumentV1 | null>(null);
@@ -33,7 +32,7 @@ export default function GrapeJSEditor({ html, onUpdate }: GrapeJSEditorProps) {
     if (nextHtml === lastEmittedRef.current) return;
     documentRef.current = nextDocument;
     lastEmittedRef.current = nextHtml;
-    onUpdateRef.current(nextHtml);
+    onUpdateRef.current(nextDocument);
   }, []);
 
   const scheduleUpdate = useCallback(() => {
@@ -65,9 +64,9 @@ export default function GrapeJSEditor({ html, onUpdate }: GrapeJSEditorProps) {
 
   useEffect(() => {
     const editor = editorRef.current;
-    if (!editor || !html || html === lastEmittedRef.current) return;
+    const html = compileDocument(document);
+    if (!editor || html === lastEmittedRef.current) return;
 
-    const document = parseEditorDocument(html);
     loadingRef.current = true;
     documentRef.current = document;
     editor.DomComponents.clear();
@@ -80,7 +79,7 @@ export default function GrapeJSEditor({ html, onUpdate }: GrapeJSEditorProps) {
       replaceCanvas(document, editor.getHtml(), editor.getCss() ?? ""),
     );
     loadingRef.current = false;
-  }, [html]);
+  }, [document]);
 
   return <div ref={containerRef} className="h-full w-full" />;
 }

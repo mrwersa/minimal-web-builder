@@ -40,9 +40,10 @@ function buildPreviewDoc(html: string): string {
 export default function Preview() {
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const code = useStore((s) => s.code);
+  const editorDocument = useStore((s) => s.editorDocument);
   const editing = useStore((s) => s.editing);
   const busy = useStore((s) => s.busy);
-  const setCodeWithHistory = useStore((s) => s.setCodeWithHistory);
+  const setDocumentWithHistory = useStore((s) => s.setDocumentWithHistory);
 
   const doc = useMemo(() => {
     if (!code) return "";
@@ -54,11 +55,14 @@ export default function Preview() {
     if (iframe && doc) iframe.srcdoc = doc;
   }, [doc]);
 
-  if (editing && code && !busy) {
+  if (editing && editorDocument && !busy) {
     return (
       <div className="relative h-full w-full overflow-hidden bg-surface">
         <Suspense fallback={<div className="flex h-full items-center justify-center"><Spinner size="lg" /></div>}>
-          <GrapeJSEditor html={code} onUpdate={(newHtml) => setCodeWithHistory(newHtml)} />
+          <GrapeJSEditor
+            document={editorDocument}
+            onUpdate={setDocumentWithHistory}
+          />
         </Suspense>
 
         {/* WYSIWYG editing indicator */}

@@ -65,6 +65,7 @@ describe("ProjectPanel", () => {
       version: 3,
       current_revision_id: "revision-3",
       html: "<main>saved</main>",
+      document: null,
       created_at: "2026-08-08T00:00:00Z",
       updated_at: "2026-08-08T00:01:00Z",
     });

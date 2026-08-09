@@ -84,6 +84,7 @@ class RevisionRecord(Base):
     )
     sequence: Mapped[int] = mapped_column(Integer)
     html: Mapped[str] = mapped_column(Text)
+    document_json: Mapped[dict | None] = mapped_column(JSON)
     source: Mapped[str] = mapped_column(String(32))
     name: Mapped[str | None] = mapped_column(String(120))
     parent_revision_id: Mapped[str | None] = mapped_column(String(36))
@@ -161,6 +162,7 @@ class ConversationRecord(Base):
     thread_id: Mapped[str] = mapped_column(String(64))
     messages: Mapped[list] = mapped_column(JSON, default=list)
     current_code: Mapped[str | None] = mapped_column(Text)
+    document_json: Mapped[dict | None] = mapped_column(JSON)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utcnow
     )

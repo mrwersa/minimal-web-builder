@@ -18,6 +18,7 @@ router = APIRouter(prefix="/api", tags=["projects"])
 class ProjectCreateRequest(BaseModel):
     name: str
     html: str = ""
+    document: dict[str, Any] | None = None
 
 
 class ProjectUpdateRequest(BaseModel):
@@ -30,6 +31,7 @@ class ProjectDuplicateRequest(BaseModel):
 
 class PageSaveRequest(BaseModel):
     html: str
+    document: dict[str, Any] | None = None
     expected_version: int
     source: str = "autosave"
 
@@ -78,7 +80,9 @@ async def projects_create(
         principal,
         "project.create",
         body.model_dump(),
-        lambda: _projects(request).create_project(principal.id, body.name, body.html),
+        lambda: _projects(request).create_project(
+            principal.id, body.name, body.html, document=body.document
+        ),
     )
 
 
@@ -157,6 +161,7 @@ async def pages_save(
             body.html,
             expected_version=body.expected_version,
             source=body.source,
+            document=body.document,
         ),
     )
 

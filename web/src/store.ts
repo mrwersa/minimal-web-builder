@@ -1,5 +1,10 @@
 import { create } from "zustand";
 import * as api from "./api";
+import {
+  compileDocument,
+  parseEditorDocument,
+  type EditorDocumentV1,
+} from "./editor/document";
 import { errorMessage } from "./lib/errors";
 
 interface State {
@@ -21,6 +26,7 @@ interface State {
   editing: boolean;
 
   code: string | null;
+  editorDocument: EditorDocumentV1 | null;
   notes: string[];
   safetyAlerts: string[];
   busy: boolean;
@@ -53,8 +59,8 @@ interface State {
   chatMessages: api.ChatMessage[];
   threadId: string;
 
-  undoStack: string[];
-  redoStack: string[];
+  undoStack: EditorDocumentV1[];
+  redoStack: EditorDocumentV1[];
 
   loadOptions: () => Promise<void>;
   set: <K extends keyof State>(key: K, value: State[K]) => void;
@@ -85,6 +91,7 @@ interface State {
   undo: () => void;
   redo: () => void;
   setCodeWithHistory: (code: string) => void;
+  setDocumentWithHistory: (document: EditorDocumentV1) => void;
 }
 
 let autosaveTimer: ReturnType<typeof setTimeout> | null = null;
@@ -119,14 +126,22 @@ function scheduleDraftSave(get: () => State, delay = 800) {
     draftTimer = null;
     const state = get();
     if (state.activePageId || state.code === null) return;
-    void api.saveConversationDocument(state.threadId, state.code).catch((error) =>
-      useStore.setState({ error: errorMessage(error) }),
-    );
+    void api
+      .saveConversationDocument(state.threadId, state.code, state.editorDocument)
+      .catch((error) => useStore.setState({ error: errorMessage(error) }));
   }, delay);
 }
 
 function hasPendingProjectChanges(state: State, projectId: string): boolean {
   return state.activeProjectId === projectId && state.saveState !== "saved";
+}
+
+function materializeDocument(
+  html: string,
+  document?: EditorDocumentV1 | null,
+): { code: string; editorDocument: EditorDocumentV1 } {
+  const editorDocument = document ?? parseEditorDocument(html);
+  return { editorDocument, code: compileDocument(editorDocument) };
 }
 
 export const useStore = create<State>((set, get) => ({
@@ -148,6 +163,7 @@ export const useStore = create<State>((set, get) => ({
   editing: false,
 
   code: null,
+  editorDocument: null,
   notes: [],
   safetyAlerts: [],
   busy: false,
@@ -366,7 +382,11 @@ export const useStore = create<State>((set, get) => ({
     const name = s.projectName.trim();
     if (!name) return;
     try {
-      const project = await api.createProject(name, s.code ?? "");
+      const project = await api.createProject(
+        name,
+        s.code ?? "",
+        s.editorDocument,
+      );
       const page = project.pages[0];
       set({
         projectName: "",
@@ -400,11 +420,12 @@ export const useStore = create<State>((set, get) => ({
       if (!page) throw new Error("Project has no pages");
       if (autosaveTimer) clearTimeout(autosaveTimer);
       autosaveTimer = null;
+      const materialized = materializeDocument(page.html, page.document);
       set({
         activeProjectId: project.id,
         activePageId: page.id,
         activePageVersion: page.version,
-        code: page.html,
+        ...materialized,
         undoStack: [],
         redoStack: [],
         chatMessages: [],
@@ -482,7 +503,13 @@ export const useStore = create<State>((set, get) => ({
     const expectedVersion = s.activePageVersion;
     set({ saveState: "saving", saveQueued: false });
     try {
-      const page = await api.savePage(pageId, html, expectedVersion);
+      const page = await api.savePage(
+        pageId,
+        html,
+        expectedVersion,
+        "autosave",
+        s.editorDocument,
+      );
       if (get().activePageId !== pageId) return;
       const saveAgain = get().saveQueued || get().code !== html;
       set({
@@ -530,11 +557,17 @@ export const useStore = create<State>((set, get) => ({
         revisionId,
         s.activePageVersion,
       );
-      const previous = get().code;
+      const current = get();
+      const previous = current.editorDocument ?? (
+        current.code ? parseEditorDocument(current.code) : null
+      );
+      const materialized = materializeDocument(page.html, page.document);
       set({
-        code: page.html,
+        ...materialized,
         activePageVersion: page.version,
-        undoStack: previous ? [...get().undoStack.slice(-49), previous] : get().undoStack,
+        undoStack: previous
+          ? [...get().undoStack.slice(-49), previous]
+          : get().undoStack,
         redoStack: [],
         saveState: "saved",
         error: null,
@@ -631,7 +664,9 @@ export const useStore = create<State>((set, get) => ({
       if (!conversation) return;
       set({
         chatMessages: conversation.messages,
-        code: conversation.current_code,
+        ...(conversation.current_code
+          ? materializeDocument(conversation.current_code, conversation.document)
+          : { code: null, editorDocument: null }),
         undoStack: [],
         redoStack: [],
       });
@@ -643,14 +678,17 @@ export const useStore = create<State>((set, get) => ({
   clearChat: () => set({ chatMessages: [], threadId: newThreadId() }),
 
   undo: () => {
-    const { undoStack, code, activePageId, saveState } = get();
+    const { undoStack, editorDocument, activePageId, saveState } = get();
     if (undoStack.length === 0) return;
-    const prev = undoStack[undoStack.length - 1];
+    const previousDocument = undoStack[undoStack.length - 1];
     const newUndo = undoStack.slice(0, -1);
     set({
       undoStack: newUndo,
-      redoStack: code ? [code, ...get().redoStack] : get().redoStack,
-      code: prev,
+      redoStack: editorDocument
+        ? [editorDocument, ...get().redoStack]
+        : get().redoStack,
+      editorDocument: previousDocument,
+      code: compileDocument(previousDocument),
       saveState: activePageId && saveState !== "conflict" ? "idle" : saveState,
     });
     scheduleAutosave(get);
@@ -658,14 +696,17 @@ export const useStore = create<State>((set, get) => ({
   },
 
   redo: () => {
-    const { redoStack, code, activePageId, saveState } = get();
+    const { redoStack, editorDocument, activePageId, saveState } = get();
     if (redoStack.length === 0) return;
-    const next = redoStack[0];
+    const nextDocument = redoStack[0];
     const newRedo = redoStack.slice(1);
     set({
       redoStack: newRedo,
-      undoStack: code ? [...get().undoStack.slice(-49), code] : get().undoStack,
-      code: next,
+      undoStack: editorDocument
+        ? [...get().undoStack.slice(-49), editorDocument]
+        : get().undoStack,
+      editorDocument: nextDocument,
+      code: compileDocument(nextDocument),
       saveState: activePageId && saveState !== "conflict" ? "idle" : saveState,
     });
     scheduleAutosave(get);
@@ -673,19 +714,26 @@ export const useStore = create<State>((set, get) => ({
   },
 
   setCodeWithHistory: (newCode) => {
-    const { code, activePageId, saveState } = get();
+    get().setDocumentWithHistory(parseEditorDocument(newCode));
+  },
+
+  setDocumentWithHistory: (nextDocument) => {
+    const { code, editorDocument, activePageId, saveState } = get();
+    const newCode = compileDocument(nextDocument);
     if (code === newCode) return;
     const nextSaveState =
       activePageId && saveState !== "conflict" ? "idle" : saveState;
-    if (code) {
+    const previousDocument = editorDocument ?? (code ? parseEditorDocument(code) : null);
+    if (previousDocument) {
       set({
-        undoStack: [...get().undoStack.slice(-49), code],
+        undoStack: [...get().undoStack.slice(-49), previousDocument],
         redoStack: [],
         code: newCode,
+        editorDocument: nextDocument,
         saveState: nextSaveState,
       });
     } else {
-      set({ code: newCode, saveState: nextSaveState });
+      set({ code: newCode, editorDocument: nextDocument, saveState: nextSaveState });
     }
     scheduleAutosave(get);
     scheduleDraftSave(get);
