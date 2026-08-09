@@ -70,6 +70,31 @@ class BuilderState(TypedDict):
     target_node_id: str | None
 
 
+def _prompt_messages(messages: Any) -> list[dict[str, str]]:
+    """Normalize graph state messages into the mappings the prompt builder needs.
+
+    ``BuilderState.messages`` is annotated with LangGraph's ``add_messages``
+    reducer, which converts the dicts we seed the graph with into ``BaseMessage``
+    objects. ``build_generation_prompt`` indexes them as mappings, so passing the
+    raw state through fails with "'SystemMessage' object is not subscriptable".
+    """
+    normalized: list[dict[str, str]] = []
+    for message in messages or []:
+        if isinstance(message, dict):
+            role = str(message.get("role", "user"))
+            content = str(message.get("content", ""))
+        else:
+            role = str(getattr(message, "type", "assistant"))
+            content = str(getattr(message, "content", ""))
+        normalized.append(
+            {
+                "role": {"ai": "assistant", "human": "user"}.get(role, role),
+                "content": content,
+            }
+        )
+    return normalized
+
+
 def _classify_intent(state: BuilderState) -> dict[str, Any]:
     """Route the user's latest message to the right workflow."""
     user_input = state.get("user_input", "")
@@ -109,7 +134,7 @@ def _call_generate(state: BuilderState) -> dict[str, Any]:
     """Full-page generation node — calls the LLM via the existing runtime."""
     client: GenerationClient = _get_client()
     settings = state.get("settings", {})
-    messages = state.get("messages", [])
+    messages = _prompt_messages(state.get("messages", []))
 
     try:
         raw = generate(
@@ -129,7 +154,7 @@ def _call_refine(state: BuilderState) -> dict[str, Any]:
     """Refinement node — re-generate with the current code as context."""
     client: GenerationClient = _get_client()
     settings = state.get("settings", {})
-    messages = state.get("messages", [])
+    messages = _prompt_messages(state.get("messages", []))
     # assistant message (set in _init_for_refine), so generation works.
     try:
         raw = generate(
