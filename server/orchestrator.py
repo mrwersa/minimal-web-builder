@@ -9,6 +9,7 @@ from sqlalchemy import select, update
 from sqlalchemy.orm import Session, sessionmaker
 
 from server.agent import run_agent, set_client
+from server.documents import validate_editor_document
 from server.models import ConversationRecord, GenerationJobRecord, utcnow
 from server.runtime import GenerationClient
 
@@ -100,8 +101,16 @@ class GenerationOrchestrator:
                 if (snapshot := _message_snapshot(item))["role"]
                 in {"user", "assistant"}
             ]
+            next_code = state.get("current_code")
             self._save_conversation(
-                conversation.id, messages, state.get("current_code")
+                conversation.id,
+                messages,
+                next_code,
+                (
+                    conversation.document_json
+                    if next_code == conversation.current_code
+                    else None
+                ),
             )
             return {
                 "html": state.get("current_code"),
@@ -134,6 +143,7 @@ class GenerationOrchestrator:
                 "thread_id": record.thread_id,
                 "messages": record.messages,
                 "current_code": record.current_code,
+                "document": record.document_json,
             }
 
     def checkpoint_document(
@@ -154,10 +164,22 @@ class GenerationOrchestrator:
         return conversation.id
 
     def update_document(
-        self, owner_id: str, thread_id: str, code: str
+        self,
+        owner_id: str,
+        thread_id: str,
+        code: str,
+        document: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         conversation = self._get_or_create_conversation(owner_id, _thread_id(thread_id))
-        self._save_conversation(conversation.id, list(conversation.messages), code)
+        clean_document = validate_editor_document(document)
+        if clean_document is None and conversation.current_code == code:
+            clean_document = conversation.document_json
+        self._save_conversation(
+            conversation.id,
+            list(conversation.messages),
+            code,
+            clean_document,
+        )
         return {"thread_id": conversation.thread_id, "saved": True}
 
     def list_jobs(self, owner_id: str) -> list[dict[str, Any]]:
@@ -200,13 +222,18 @@ class GenerationOrchestrator:
             return record
 
     def _save_conversation(
-        self, conversation_id: str, messages: list[dict[str, str]], code: str | None
+        self,
+        conversation_id: str,
+        messages: list[dict[str, str]],
+        code: str | None,
+        document: dict[str, Any] | None = None,
     ) -> None:
         with self._sessions.begin() as session:
             record = session.get(ConversationRecord, conversation_id)
             if record is not None:
                 record.messages = messages
                 record.current_code = code
+                record.document_json = document
                 record.updated_at = utcnow()
 
     def _start_job(

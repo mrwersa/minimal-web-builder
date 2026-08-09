@@ -17,6 +17,7 @@ from sqlalchemy import (
 from sqlalchemy.orm import Session, sessionmaker
 
 from server.content import validate_document
+from server.documents import validate_editor_document
 from server.models import (
     MAX_PROJECT_NAME_CHARS,
     PageRecord,
@@ -73,10 +74,15 @@ class ProjectService:
         self._sessions = sessions
 
     def create_project(
-        self, owner_id: str, name: str, html: str = ""
+        self,
+        owner_id: str,
+        name: str,
+        html: str = "",
+        document: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         clean_name = _project_name(name)
         clean_html = validate_document(html)
+        clean_document = validate_editor_document(document)
         with self._sessions.begin() as session:
             project = ProjectRecord(owner_id=owner_id, name=clean_name)
             session.add(project)
@@ -88,7 +94,9 @@ class ProjectService:
             )
             session.add(page)
             session.flush()
-            self._append_revision(session, page, clean_html, "create")
+            self._append_revision(
+                session, page, clean_html, "create", document=clean_document
+            )
             return self._project_snapshot(session, project)
 
     def list_projects(
@@ -164,7 +172,11 @@ class ProjectService:
                 session.flush()
                 revision = self._current_revision(session, source_page)
                 self._append_revision(
-                    session, page, revision.html if revision else "", "duplicate"
+                    session,
+                    page,
+                    revision.html if revision else "",
+                    "duplicate",
+                    document=revision.document_json if revision else None,
                 )
             return self._project_snapshot(session, duplicate)
 
@@ -190,17 +202,36 @@ class ProjectService:
         *,
         expected_version: int,
         source: str = "autosave",
+        document: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         clean_html = validate_document(html)
+        clean_document = validate_editor_document(document)
         clean_source = source if source in _REVISION_SOURCES else "manual"
         with self._sessions.begin() as session:
             page = self._owned_page(session, owner_id, page_id)
             if page.version != expected_version:
                 raise VersionConflictError(page.version)
             current = self._current_revision(session, page)
-            if current is not None and current.html == clean_html:
+            effective_document = clean_document
+            if (
+                effective_document is None
+                and current is not None
+                and current.html == clean_html
+            ):
+                effective_document = current.document_json
+            if (
+                current is not None
+                and current.html == clean_html
+                and current.document_json == effective_document
+            ):
                 return self._page_snapshot(session, page)
-            self._append_revision(session, page, clean_html, clean_source)
+            self._append_revision(
+                session,
+                page,
+                clean_html,
+                clean_source,
+                document=effective_document,
+            )
             self._touch_project(session, page)
             return self._page_snapshot(session, page)
 
@@ -224,7 +255,13 @@ class ProjectService:
             revision = session.get(RevisionRecord, revision_id)
             if revision is None or revision.page_id != page.id:
                 raise ProjectNotFoundError("Revision not found")
-            self._append_revision(session, page, revision.html, "restore")
+            self._append_revision(
+                session,
+                page,
+                revision.html,
+                "restore",
+                document=revision.document_json,
+            )
             self._touch_project(session, page)
             return self._page_snapshot(session, page)
 
@@ -243,6 +280,7 @@ class ProjectService:
                 current.html if current else "",
                 "checkpoint",
                 name=clean_name,
+                document=current.document_json if current else None,
             )
             self._touch_project(session, page)
             return self._page_snapshot(session, page)
@@ -267,7 +305,13 @@ class ProjectService:
             page = PageRecord(project_id=project.id, name="Home", slug="home")
             session.add(page)
             session.flush()
-            self._append_revision(session, page, revision.html, "duplicate")
+            self._append_revision(
+                session,
+                page,
+                revision.html,
+                "duplicate",
+                document=revision.document_json,
+            )
             return self._project_snapshot(session, project)
 
     @staticmethod
@@ -308,6 +352,7 @@ class ProjectService:
         source: str,
         *,
         name: str | None = None,
+        document: dict[str, Any] | None = None,
     ) -> RevisionRecord:
         expected_version = page.version
         next_version = expected_version + 1
@@ -318,6 +363,7 @@ class ProjectService:
             page_id=page.id,
             sequence=next_version,
             html=html,
+            document_json=document,
             source=source,
             name=name,
             parent_revision_id=page.current_revision_id,
@@ -393,6 +439,7 @@ class ProjectService:
             "updated_at": isoformat_utc(page.updated_at),
         }
         result["html"] = revision.html if revision else ""
+        result["document"] = revision.document_json if revision else None
         return result
 
     @staticmethod

@@ -34,6 +34,9 @@ vi.mock("./api", () => ({
 }));
 
 import { useStore } from "./store";
+import { compileDocument, parseEditorDocument } from "./editor/document";
+
+const canonical = (html: string) => compileDocument(parseEditorDocument(html));
 
 const generated = {
   html: "<html><body>new</body></html>",
@@ -50,6 +53,7 @@ const page = {
   version: 1,
   current_revision_id: "revision-1",
   html: "<html>project</html>",
+  document: null,
   created_at: "2026-08-08T00:00:00Z",
   updated_at: "2026-08-08T00:00:00Z",
 };
@@ -69,6 +73,7 @@ describe("document revision workflows", () => {
     vi.clearAllMocks();
     useStore.setState({
       code: null,
+      editorDocument: null,
       busy: false,
       error: null,
       undoStack: [],
@@ -109,7 +114,7 @@ describe("document revision workflows", () => {
         density: "balanced",
       },
     }));
-    expect(useStore.getState().code).toBe(generated.html);
+    expect(useStore.getState().code).toBe(canonical(generated.html));
   });
 
   it("records AI generations in undo history", async () => {
@@ -118,9 +123,12 @@ describe("document revision workflows", () => {
 
     await useStore.getState().runGenerate("improve the page");
 
-    expect(useStore.getState().undoStack).toEqual(["<html>old</html>"]);
+    expect(useStore.getState().undoStack).toHaveLength(1);
+    expect(compileDocument(useStore.getState().undoStack[0])).toBe(
+      canonical("<html>old</html>"),
+    );
     useStore.getState().undo();
-    expect(useStore.getState().code).toBe("<html>old</html>");
+    expect(useStore.getState().code).toBe(canonical("<html>old</html>"));
   });
 
   it("opens a template as a new conversation and a reversible revision", async () => {
@@ -133,9 +141,9 @@ describe("document revision workflows", () => {
     await useStore.getState().doLoadTemplate("landing");
 
     expect(api.loadTemplate).toHaveBeenCalledWith("landing");
-    expect(useStore.getState().code).toBe("<html>template</html>");
+    expect(useStore.getState().code).toBe(canonical("<html>template</html>"));
     expect(useStore.getState().chatMessages).toEqual([]);
-    expect(useStore.getState().undoStack).toEqual(["<html>old</html>"]);
+    expect(useStore.getState().undoStack).toHaveLength(1);
   });
 
   it("restores a durable conversation checkpoint", async () => {
@@ -143,11 +151,12 @@ describe("document revision workflows", () => {
       thread_id: useStore.getState().threadId,
       messages: [{ role: "assistant", content: "Welcome back" }],
       current_code: "<html>restored</html>",
+      document: null,
     });
 
     await useStore.getState().restoreConversation();
 
-    expect(useStore.getState().code).toBe("<html>restored</html>");
+    expect(useStore.getState().code).toBe(canonical("<html>restored</html>"));
     expect(useStore.getState().chatMessages).toEqual([
       { role: "assistant", content: "Welcome back" },
     ]);
@@ -155,20 +164,27 @@ describe("document revision workflows", () => {
   });
 
   it("creates a durable project from the current document", async () => {
-    useStore.setState({ code: "<html>project</html>", projectName: "Launch" });
+    useStore.setState({ projectName: "Launch" });
+    useStore.getState().setCodeWithHistory("<html>project</html>");
     vi.mocked(api.createProject).mockResolvedValue(project);
 
     await useStore.getState().createCurrentProject();
 
-    expect(api.createProject).toHaveBeenCalledWith("Launch", "<html>project</html>");
+    expect(api.createProject).toHaveBeenCalledWith(
+      "Launch",
+      canonical("<html>project</html>"),
+      expect.objectContaining({ schemaVersion: 1 }),
+    );
     expect(useStore.getState().activeProjectId).toBe("project-1");
     expect(useStore.getState().activePageVersion).toBe(1);
     expect(useStore.getState().saveState).toBe("saved");
   });
 
   it("saves the active page with optimistic versioning", async () => {
+    const editorDocument = parseEditorDocument("<html>v2</html>");
     useStore.setState({
-      code: "<html>v2</html>",
+      code: compileDocument(editorDocument),
+      editorDocument,
       activeProjectId: "project-1",
       activePageId: "page-1",
       activePageVersion: 1,
@@ -182,7 +198,13 @@ describe("document revision workflows", () => {
 
     await useStore.getState().saveActivePage();
 
-    expect(api.savePage).toHaveBeenCalledWith("page-1", "<html>v2</html>", 1);
+    expect(api.savePage).toHaveBeenCalledWith(
+      "page-1",
+      canonical("<html>v2</html>"),
+      1,
+      "autosave",
+      editorDocument,
+    );
     expect(useStore.getState().activePageVersion).toBe(2);
     expect(useStore.getState().saveState).toBe("saved");
   });
@@ -227,7 +249,8 @@ describe("document revision workflows", () => {
 
     expect(api.saveConversationDocument).toHaveBeenCalledWith(
       useStore.getState().threadId,
-      "<html>edited</html>",
+      canonical("<html>edited</html>"),
+      expect.objectContaining({ schemaVersion: 1 }),
     );
     vi.useRealTimers();
   });
@@ -327,7 +350,7 @@ describe("document revision workflows", () => {
       "Launch · v1",
     );
     expect(useStore.getState().activeProjectId).toBe("project-2");
-    expect(useStore.getState().code).toBe("<html>historical</html>");
+    expect(useStore.getState().code).toBe(canonical("<html>historical</html>"));
   });
 
   it("surfaces and clears sidebar resource load errors", async () => {

@@ -78,7 +78,7 @@ Exit metrics:
 
 Goal: common changes are faster by direct manipulation than by prompting.
 
-- Introduce a versioned structured document schema and deterministic HTML compiler.
+- ✅ Introduce a versioned structured document schema and deterministic HTML compiler.
 - Add stable selection, breadcrumbs, layers, element tree, and property inspector.
 - Add desktop, tablet, and mobile breakpoints with viewport presets and zoom.
 - Add drag/reorder, spacing, typography, color, layout, visibility, and link controls.

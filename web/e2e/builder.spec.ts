@@ -3,16 +3,23 @@ import { expect, test } from "@playwright/test";
 const initialHtml = "<!doctype html><html><body><h1>Fern Coffee</h1></body></html>";
 const editedHtml =
   "<!doctype html><html><body><h1>Fern Coffee Roasters</h1></body></html>";
+const portableInitialHtml =
+  "<!doctype html>\n<html>\n<head></head>\n<body><h1>Fern Coffee</h1></body></html>";
 
 test("generate, edit, undo, and export the page", async ({ page }) => {
   let conversationHtml: string | null = null;
+  let conversationDocument: unknown = null;
   await page.route("**/api/auth/me", (route) =>
     route.fulfill({ json: { id: "user-1", email: "owner@example.test" } }),
   );
   await page.route("**/api/conversations/**", (route) => {
     if (route.request().method() === "PUT") {
-      const body = route.request().postDataJSON() as { code: string };
+      const body = route.request().postDataJSON() as {
+        code: string;
+        document: unknown;
+      };
       conversationHtml = body.code;
+      conversationDocument = body.document;
       return route.fulfill({ json: { saved: true } });
     }
     if (!conversationHtml) {
@@ -27,6 +34,7 @@ test("generate, edit, undo, and export the page", async ({ page }) => {
           { role: "assistant", content: "Updated the heading." },
         ],
         current_code: conversationHtml,
+        document: conversationDocument,
       },
     });
   });
@@ -87,7 +95,7 @@ test("generate, edit, undo, and export the page", async ({ page }) => {
   });
   await page.route("**/api/export", async (route) => {
     const request = route.request().postDataJSON() as { html: string; mode: string };
-    expect(request.html).toBe(initialHtml);
+    expect(request.html).toBe(portableInitialHtml);
     await route.fulfill({
       json: { mode: request.mode, files: { "index.html": request.html } },
     });

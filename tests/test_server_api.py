@@ -14,6 +14,7 @@ from server.orchestrator import GenerationOrchestrator
 from server.projects import ProjectService
 from server.runtime import GenerationClient
 from src.config import AppConfig
+from tests.editor_document import editor_document
 
 
 @pytest.fixture()
@@ -231,7 +232,10 @@ def test_chat_checkpoint_and_job_are_durable(client: TestClient) -> None:
     assert response.json()["intent"] == "answer"
     draft = client.put(
         "/api/conversations/conversation-1/document",
-        json={"code": "<main>manually edited</main>"},
+        json={
+            "code": "<main>manually edited</main>",
+            "document": editor_document(),
+        },
     )
     assert draft.status_code == 200
     app.state.orchestrator = GenerationOrchestrator(app.state.database.sessions)
@@ -239,6 +243,7 @@ def test_chat_checkpoint_and_job_are_durable(client: TestClient) -> None:
     assert checkpoint.status_code == 200
     assert checkpoint.json()["thread_id"] == "conversation-1"
     assert checkpoint.json()["current_code"] == "<main>manually edited</main>"
+    assert checkpoint.json()["document"] == editor_document()
     assert [item["role"] for item in checkpoint.json()["messages"]] == [
         "user",
         "assistant",
@@ -250,11 +255,17 @@ def test_chat_checkpoint_and_job_are_durable(client: TestClient) -> None:
 
 def test_project_revision_api_round_trip(client: TestClient) -> None:
     created_response = client.post(
-        "/api/projects", json={"name": "Product", "html": "<main>v1</main>"}
+        "/api/projects",
+        json={
+            "name": "Product",
+            "html": "<main>v1</main>",
+            "document": editor_document("project-v1"),
+        },
     )
     assert created_response.status_code == 201
     created = created_response.json()
     page = created["pages"][0]
+    assert page["document"] == editor_document("project-v1")
 
     assert client.get("/api/projects").json()["projects"][0]["id"] == created["id"]
     saved_response = client.put(
@@ -327,6 +338,16 @@ def test_project_revision_api_round_trip(client: TestClient) -> None:
         item["id"] for item in client.get("/api/projects").json()["projects"]
     ]
     assert created["id"] not in project_ids
+
+
+def test_project_api_rejects_invalid_structured_document(client: TestClient) -> None:
+    response = client.post(
+        "/api/projects",
+        json={"name": "Invalid", "html": "", "document": {"schemaVersion": 99}},
+    )
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == "Unsupported editor document schema"
 
 
 def test_project_create_replays_idempotent_response(client: TestClient) -> None:

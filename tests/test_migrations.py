@@ -35,6 +35,12 @@ def test_initial_migration_builds_service_schema(tmp_path, monkeypatch) -> None:
         "user_sessions",
         "users",
     }
+    assert "document_json" in {
+        column["name"] for column in inspect(engine).get_columns("revisions")
+    }
+    assert "document_json" in {
+        column["name"] for column in inspect(engine).get_columns("conversations")
+    }
     engine.dispose()
 
     database = Database.from_url(database_url, create_schema=False)
