@@ -12,9 +12,9 @@ import {
 } from "lucide-react";
 import { useStore } from "../store";
 import { cn } from "../lib/utils";
-import { Button } from "./ui/Button";
-import { Input } from "./ui/Input";
-import { InlineError } from "./ui/InlineError";
+import { Button } from "./ui/button";
+import { Input } from "./ui/input";
+import { InlineError } from "./ui/field";
 
 export default function ProjectPanel() {
   const s = useStore();
@@ -75,7 +75,7 @@ export default function ProjectPanel() {
       </div>
 
       <div className="relative">
-        <Search className="pointer-events-none absolute left-2.5 top-2.5 h-3.5 w-3.5 text-muted2" />
+        <Search className="pointer-events-none absolute left-2.5 top-2.5 h-3.5 w-3.5 text-muted-foreground" />
         <Input
           value={s.projectSearch}
           onChange={(event) => s.set("projectSearch", event.target.value)}
@@ -86,8 +86,8 @@ export default function ProjectPanel() {
       </div>
 
       {s.activeProjectId && (
-        <div className="flex items-center justify-between rounded-lg bg-bg px-2.5 py-2 text-xs">
-          <span className="flex items-center gap-1.5 text-muted">
+        <div className="flex items-center justify-between rounded-lg bg-background px-2.5 py-2 text-xs">
+          <span className="flex items-center gap-1.5 text-muted-foreground">
             <Cloud className="h-3.5 w-3.5" />
             {s.saveState === "saving"
               ? "Saving…"
@@ -99,7 +99,7 @@ export default function ProjectPanel() {
           </span>
           <button
             onClick={() => s.saveActivePage()}
-            className="font-medium text-accent hover:underline"
+            className="font-medium text-primary hover:underline"
           >
             Save now
           </button>
@@ -108,7 +108,7 @@ export default function ProjectPanel() {
 
       <div className="space-y-1">
         {s.projects.map((project) => (
-          <div key={project.id} className="rounded-lg border border-border2 p-1.5">
+          <div key={project.id} className="rounded-lg border border-border p-1.5">
             {renameId === project.id ? (
               <div className="flex gap-1.5">
                 <Input
@@ -131,7 +131,7 @@ export default function ProjectPanel() {
                 </Button>
                 <button
                   onClick={() => setRenameId(null)}
-                  className="rounded p-1.5 text-muted2 hover:bg-bg hover:text-text"
+                  className="rounded p-1.5 text-muted-foreground hover:bg-background hover:text-text"
                   aria-label="Cancel rename"
                 >
                   <X className="h-3.5 w-3.5" />
@@ -139,11 +139,11 @@ export default function ProjectPanel() {
               </div>
             ) : archiveId === project.id ? (
               <div className="flex items-center justify-between gap-2 px-1 py-0.5 text-xs">
-                <span className="text-muted">Archive this project?</span>
+                <span className="text-muted-foreground">Archive this project?</span>
                 <div className="flex gap-1.5">
                   <button
                     onClick={() => setArchiveId(null)}
-                    className="text-muted2 hover:text-text"
+                    className="text-muted-foreground hover:text-text"
                   >
                     Cancel
                   </button>
@@ -166,8 +166,8 @@ export default function ProjectPanel() {
                   className={cn(
                     "min-w-0 flex-1 rounded px-1.5 py-1 text-left text-xs",
                     s.activeProjectId === project.id
-                      ? "bg-accentSoft text-accent"
-                      : "text-muted hover:bg-bg",
+                      ? "bg-primary/10 text-primary"
+                      : "text-muted-foreground hover:bg-background",
                   )}
                 >
                   <span className="flex items-center gap-1.5 truncate font-medium">
@@ -206,7 +206,7 @@ export default function ProjectPanel() {
           </div>
         ))}
         {s.projects.length === 0 && (
-          <p className="px-1 py-2 text-xs text-muted2">
+          <p className="px-1 py-2 text-xs text-muted-foreground">
             {s.projectSearch ? "No projects match this search." : "No projects yet."}
           </p>
         )}
@@ -232,15 +232,15 @@ export default function ProjectPanel() {
       )}
 
       {s.revisions.length > 1 && (
-        <details className="rounded-lg border border-border2 p-2">
-          <summary className="cursor-pointer text-xs font-medium text-muted">
+        <details className="rounded-lg border border-border p-2">
+          <summary className="cursor-pointer text-xs font-medium text-muted-foreground">
             Version history
           </summary>
           <div className="mt-2 space-y-1">
             {s.revisions.slice(0, 8).map((revision) => (
               <div
                 key={revision.id}
-                className="flex items-center justify-between rounded px-1.5 py-1 text-xs text-muted2"
+                className="flex items-center justify-between rounded px-1.5 py-1 text-xs text-muted-foreground"
               >
                 <span>
                   v{revision.sequence} · {revision.name ?? revision.source}
@@ -249,7 +249,7 @@ export default function ProjectPanel() {
                   <button
                     onClick={() => void s.duplicateRevision(revision.id, revision.sequence)}
                     aria-label={`Duplicate version ${revision.sequence}`}
-                    className="rounded p-1 hover:bg-accentSoft hover:text-accent"
+                    className="rounded p-1 hover:bg-primary/10 hover:text-primary"
                   >
                     <Copy className="h-3.5 w-3.5" />
                   </button>
@@ -257,7 +257,7 @@ export default function ProjectPanel() {
                     onClick={() => s.restoreRevision(revision.id)}
                     disabled={revision.sequence === s.activePageVersion}
                     aria-label={`Restore version ${revision.sequence}`}
-                    className="rounded p-1 hover:bg-accentSoft hover:text-accent disabled:opacity-30"
+                    className="rounded p-1 hover:bg-primary/10 hover:text-primary disabled:opacity-30"
                   >
                     <RotateCcw className="h-3.5 w-3.5" />
                   </button>
@@ -288,7 +288,7 @@ function ProjectAction({
       aria-label={label}
       title={label}
       disabled={disabled}
-      className="rounded p-1.5 text-muted2 hover:bg-bg hover:text-text disabled:opacity-40"
+      className="rounded p-1.5 text-muted-foreground hover:bg-background hover:text-text disabled:opacity-40"
     >
       {children}
     </button>

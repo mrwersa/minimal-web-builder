@@ -11,7 +11,7 @@ import {
   setElementText,
 } from "../../editor/operations";
 import { tokenOptions } from "../../editor/tokens";
-import { Select } from "../ui/Select";
+import { Select } from "../ui/select";
 import { CommitField, InspectorSection } from "./EditorFields";
 
 interface EditorInspectorProps {
@@ -70,7 +70,7 @@ export default function EditorInspector({
 }: EditorInspectorProps) {
   if (!node) {
     return (
-      <div className="p-3 text-xs text-muted2">
+      <div className="p-3 text-xs text-muted-foreground">
         Select an element on the canvas or in Layers to edit its properties.
       </div>
     );
@@ -88,12 +88,12 @@ export default function EditorInspector({
     <div className="space-y-3 p-3" aria-label="Property inspector">
       <div>
         <div className="flex items-center justify-between gap-2">
-          <div className="text-xs font-semibold text-text2">&lt;{node.tag}&gt;</div>
-          <span className="rounded bg-bg px-1.5 py-0.5 text-[10px] capitalize text-muted2">
+          <div className="text-xs font-semibold text-foreground">&lt;{node.tag}&gt;</div>
+          <span className="rounded bg-background px-1.5 py-0.5 text-[10px] capitalize text-muted-foreground">
             {breakpoint}
           </span>
         </div>
-        <div className="mt-0.5 truncate font-mono text-[10px] text-muted2">{node.id}</div>
+        <div className="mt-0.5 truncate font-mono text-[10px] text-muted-foreground">{node.id}</div>
       </div>
 
       <InspectorSection title="Content & attributes">
@@ -183,7 +183,7 @@ export default function EditorInspector({
             onCommit={(value) => commitStyle(property, value)}
           />
         ))}
-        <label className="block space-y-1 text-[11px] font-medium text-muted2">
+        <label className="block space-y-1 text-[11px] font-medium text-muted-foreground">
           <span>Font weight</span>
           <Select
             value={styleValue("font-weight")}
@@ -197,7 +197,7 @@ export default function EditorInspector({
             onChange={(value) => commitStyle("font-weight", value)}
           />
         </label>
-        <label className="block space-y-1 text-[11px] font-medium text-muted2">
+        <label className="block space-y-1 text-[11px] font-medium text-muted-foreground">
           <span>Text align</span>
           <Select
             value={styleValue("text-align")}
@@ -232,7 +232,7 @@ export default function EditorInspector({
       </InspectorSection>
 
       <InspectorSection title="Layout & visibility">
-        <label className="block space-y-1 text-[11px] font-medium text-muted2">
+        <label className="block space-y-1 text-[11px] font-medium text-muted-foreground">
           <span>Display</span>
           <Select
             value={styleValue("display")}
@@ -247,7 +247,7 @@ export default function EditorInspector({
             onChange={(value) => commitStyle("display", value)}
           />
         </label>
-        <label className="block space-y-1 text-[11px] font-medium text-muted2">
+        <label className="block space-y-1 text-[11px] font-medium text-muted-foreground">
           <span>Direction</span>
           <Select
             value={styleValue("flex-direction")}

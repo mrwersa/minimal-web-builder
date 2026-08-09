@@ -154,6 +154,7 @@ test("generate, edit, undo, and export the page", async ({ page }) => {
   await expect(preview.getByRole("heading", { name: "Fern Coffee", exact: true })).toBeVisible();
 
   await page.getByLabel("WYSIWYG editing").click();
+  await page.getByRole("button", { name: "Global design tokens" }).click();
   await page.getByLabel("Primary color").fill("#c2410c");
   await page.getByLabel("Primary color").press("Tab");
   await page.getByRole("treeitem", { name: /h1 · Fern Coffee/ }).click();
@@ -173,9 +174,9 @@ test("generate, edit, undo, and export the page", async ({ page }) => {
   await expect(page.getByRole("treeitem", { name: /h1 · Fern Ember/ })).toBeVisible();
   await page.getByTitle("Undo (Ctrl+Z)").click();
   await expect(page.getByRole("treeitem", { name: /h1 · Fern Coffee/ })).toBeVisible();
-  await page.getByRole("button", { name: "Tablet viewport" }).click();
+  await page.getByLabel("Tablet viewport").click();
   await expect(page.getByText("768px", { exact: true })).toBeVisible();
-  await page.getByRole("button", { name: "Mobile viewport" }).click();
+  await page.getByLabel("Mobile viewport").click();
   await expect(page.getByText("390px", { exact: true })).toBeVisible();
   await page.getByRole("button", { name: "Zoom out" }).click();
   await expect(page.getByText("75%", { exact: true })).toBeVisible();
@@ -191,6 +192,7 @@ test("generate, edit, undo, and export the page", async ({ page }) => {
     .toBe("24px");
   await page.getByLabel("WYSIWYG editing").click();
 
+  await page.getByRole("tab", { name: "Chat" }).click();
   const chatInput = page.getByPlaceholder("Describe a change or ask a question…");
   await chatInput.fill("Change the heading");
   await chatInput.press("Enter");
@@ -206,7 +208,7 @@ test("generate, edit, undo, and export the page", async ({ page }) => {
   await expect(preview.getByRole("heading", { name: "Fern Coffee", exact: true })).toBeVisible();
   await draftSaved;
 
-  await page.getByRole("button", { name: "Code" }).click();
+  await page.getByRole("tab", { name: "Code" }).click();
   const advancedSaved = page.waitForRequest(
     (request) =>
       request.method() === "PUT" && request.url().includes("/api/conversations/"),

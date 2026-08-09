@@ -41,7 +41,7 @@ export default function AdvancedCodePanel({
   onChange: (document: EditorDocumentV1) => void;
 }) {
   return (
-    <div className="min-h-0 flex-1 overflow-y-auto rounded-xl border border-border2 bg-surface p-4">
+    <div className="min-h-0 flex-1 overflow-y-auto rounded-xl border border-border bg-surface p-4">
       <div className="mb-4 flex gap-2 rounded-lg border border-warning/30 bg-warning/10 p-3 text-xs text-warning">
         <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
         <p>
@@ -58,7 +58,7 @@ export default function AdvancedCodePanel({
               placeholder={placeholder}
               onCommit={(value) => onChange(setAdvancedSource(document, field, value))}
             />
-            <p className="text-[11px] text-muted2">{help}</p>
+            <p className="text-[11px] text-muted-foreground">{help}</p>
           </div>
         ))}
       </div>

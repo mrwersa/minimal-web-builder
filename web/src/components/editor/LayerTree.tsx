@@ -34,7 +34,7 @@ export default function LayerTree({
   return (
     <div role="tree" aria-label="Page layers" className="space-y-0.5 p-2">
       {entries.length === 0 && (
-        <p className="p-2 text-xs text-muted2">This page has no editable elements.</p>
+        <p className="p-2 text-xs text-muted-foreground">This page has no editable elements.</p>
       )}
       {entries.map(({ node, depth }) => (
         <button
@@ -103,8 +103,8 @@ export default function LayerTree({
           className={cn(
             "flex w-full items-center gap-1 rounded px-1.5 py-1 text-left text-xs",
             selectedNodeId === node.id
-              ? "bg-accentSoft text-accent"
-              : "text-muted hover:bg-bg hover:text-text2",
+              ? "bg-primary/10 text-primary"
+              : "text-muted-foreground hover:bg-background hover:text-foreground",
           )}
           style={{ paddingLeft: `${depth * 12 + 6}px` }}
         >
