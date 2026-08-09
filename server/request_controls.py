@@ -28,6 +28,7 @@ async def enforce_request_controls(request: Request, call_next):
         principal = await offload(
             auth.authenticate, request.cookies.get(SESSION_COOKIE)
         )
+    request.state.principal = principal
     path = request.url.path
     request_id = (request.headers.get("X-Request-ID") or str(uuid.uuid4()))[:128]
     config = getattr(getattr(request.app.state, "client", None), "config", None)

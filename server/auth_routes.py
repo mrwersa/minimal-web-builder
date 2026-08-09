@@ -43,9 +43,12 @@ def _set_session_cookie(response: Response, request: Request, token: str) -> Non
 
 
 async def require_principal(request: Request) -> Principal:
-    principal = await offload(
-        _auth(request).authenticate, request.cookies.get(SESSION_COOKIE)
-    )
+    if hasattr(request.state, "principal"):
+        principal = request.state.principal
+    else:
+        principal = await offload(
+            _auth(request).authenticate, request.cookies.get(SESSION_COOKIE)
+        )
     if principal is None:
         raise HTTPException(status_code=401, detail="Authentication required")
     return principal

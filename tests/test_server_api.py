@@ -366,6 +366,23 @@ def test_project_api_requires_authentication(client: TestClient) -> None:
     assert response.json()["detail"] == "Authentication required"
 
 
+def test_authenticated_request_reuses_middleware_principal(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    authenticate = app.state.auth.authenticate
+    calls = 0
+
+    def counted_authenticate(token):
+        nonlocal calls
+        calls += 1
+        return authenticate(token)
+
+    monkeypatch.setattr(app.state.auth, "authenticate", counted_authenticate)
+
+    assert client.get("/api/projects").status_code == 200
+    assert calls == 1
+
+
 def test_authentication_round_trip(client: TestClient) -> None:
     me = client.get("/api/auth/me")
     assert me.status_code == 200
