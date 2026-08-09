@@ -110,6 +110,8 @@ test("generate, edit, undo, and export the page", async ({ page }) => {
     expect(request.html).toContain("font-size: 24px;");
     expect(request.html).toContain("--mwb-color-primary: #c2410c;");
     expect(request.html).toContain("color: var(--mwb-color-primary)");
+    expect(request.html).toContain("outline: 2px solid rebeccapurple");
+    expect(request.html).toContain("window.advancedReady = true");
     expect(request.html).toContain("mwb-node-");
     expect(request.html).not.toContain("data-mwb-id");
     await route.fulfill({
@@ -206,6 +208,21 @@ test("generate, edit, undo, and export the page", async ({ page }) => {
   await draftSaved;
 
   await page.getByRole("button", { name: "Code" }).click();
+  const advancedSaved = page.waitForRequest(
+    (request) =>
+      request.method() === "PUT" && request.url().includes("/api/conversations/"),
+  );
+  await page.getByRole("button", { name: "Advanced" }).click();
+  await page
+    .getByLabel("Custom CSS")
+    .fill("body { outline: 2px solid rebeccapurple; }");
+  await page.getByLabel("Custom CSS").press("Control+Enter");
+  await page
+    .getByLabel("Body script HTML")
+    .fill("<script>window.advancedReady = true;</script>");
+  await page.getByLabel("Body script HTML").press("Control+Enter");
+  await page.getByRole("button", { name: "Compiled output" }).click();
+  await advancedSaved;
   await page.getByRole("button", { name: "Prepare export" }).click();
   await expect(page.getByRole("button", { name: "index.html" })).toBeVisible();
 
@@ -216,4 +233,12 @@ test("generate, edit, undo, and export the page", async ({ page }) => {
       exact: true,
     }),
   ).toBeVisible();
+  await expect
+    .poll(() =>
+      page
+        .frameLocator('iframe[title="preview"]')
+        .locator("body")
+        .evaluate(() => Boolean((window as typeof window & { advancedReady?: boolean }).advancedReady)),
+    )
+    .toBe(true);
 });
