@@ -4,6 +4,7 @@ from types import SimpleNamespace
 from src.generation import (
     BASE_PROMPT,
     DEFAULT_GENERATION_TIMEOUT_SECONDS,
+    ProviderError,
     build_generation_prompt,
     build_section_regeneration_prompt,
     call_gemini,
@@ -540,3 +541,111 @@ def test_call_gemini_for_section_uses_the_configured_timeout(monkeypatch) -> Non
     )
 
     assert captured["timeout"] == 11
+
+
+def _openrouter_call(**overrides):
+    kwargs = {
+        "model": "google/gemini-2.0-flash",
+        "genai": None,
+        "messages": [{"role": "user", "content": "hi"}],
+        "temperature": 0.3,
+        "max_output_tokens": 200,
+        "provider": "openrouter",
+        "api_key": "or-key",
+        "retry_backoff_seconds": 0,
+    }
+    kwargs.update(overrides)
+    return call_gemini(**kwargs)
+
+
+def _flaky_urlopen(failures: int, error: str = "HTTP 503 Service Unavailable"):
+    state = {"calls": 0}
+
+    def fake_urlopen(request, timeout=None):
+        state["calls"] += 1
+        if state["calls"] <= failures:
+            raise RuntimeError(error)
+        body = json.dumps({"choices": [{"message": {"content": "<main>ok</main>"}}]})
+        return _FakeResponse(body.encode("utf-8"))
+
+    return fake_urlopen, state
+
+
+def test_generation_does_not_retry_by_default(monkeypatch) -> None:
+    """src defaults stay at one attempt; only the server opts into retries."""
+    fake_urlopen, state = _flaky_urlopen(failures=1)
+    monkeypatch.setattr("src.generation.urllib.request.urlopen", fake_urlopen)
+
+    out = _openrouter_call()
+
+    assert out.startswith("API error:")
+    assert state["calls"] == 1
+
+
+def test_generation_retries_transient_failures(monkeypatch) -> None:
+    fake_urlopen, state = _flaky_urlopen(failures=2)
+    monkeypatch.setattr("src.generation.urllib.request.urlopen", fake_urlopen)
+
+    out = _openrouter_call(max_attempts=3)
+
+    assert out == "<main>ok</main>"
+    assert state["calls"] == 3
+
+
+def test_generation_gives_up_after_max_attempts(monkeypatch) -> None:
+    fake_urlopen, state = _flaky_urlopen(failures=99)
+    monkeypatch.setattr("src.generation.urllib.request.urlopen", fake_urlopen)
+
+    out = _openrouter_call(max_attempts=3)
+
+    assert out.startswith("API error:")
+    assert "503" in out
+    assert state["calls"] == 3
+
+
+def test_generation_does_not_retry_a_rejected_key(monkeypatch) -> None:
+    """Retrying a permanent auth failure only multiplies latency."""
+    fake_urlopen, state = _flaky_urlopen(failures=99, error="HTTP 401 Unauthorized")
+    monkeypatch.setattr("src.generation.urllib.request.urlopen", fake_urlopen)
+
+    out = _openrouter_call(max_attempts=5)
+
+    assert out.startswith("API error:")
+    assert state["calls"] == 1
+
+
+def test_retry_backoff_grows_exponentially(monkeypatch) -> None:
+    fake_urlopen, _state = _flaky_urlopen(failures=99)
+    monkeypatch.setattr("src.generation.urllib.request.urlopen", fake_urlopen)
+    slept: list[float] = []
+    monkeypatch.setattr("src.generation.time.sleep", slept.append)
+
+    _openrouter_call(max_attempts=4, retry_backoff_seconds=0.5)
+
+    # Backoff happens between attempts, never after the last one: four attempts
+    # sleep three times, doubling each round.
+    assert slept == [0.5, 1.0, 2.0]
+
+
+def test_each_attempt_records_its_own_event(tmp_path, monkeypatch) -> None:
+    analytics = tmp_path / "events.jsonl"
+    fake_urlopen, _state = _flaky_urlopen(failures=1)
+    monkeypatch.setattr("src.generation.urllib.request.urlopen", fake_urlopen)
+
+    _openrouter_call(max_attempts=2, analytics_file=str(analytics))
+
+    events = [
+        json.loads(line) for line in analytics.read_text(encoding="utf-8").splitlines()
+    ]
+    assert [event["event"] for event in events] == [
+        "generation.error",
+        "generation.success",
+    ]
+    assert [event["attempt"] for event in events] == [1, 2]
+
+
+def test_permanent_and_transient_errors_are_classified() -> None:
+    assert ProviderError("HTTP 503 Service Unavailable").retryable is True
+    assert ProviderError("<urlopen error timed out>").retryable is True
+    assert ProviderError("HTTP 401 Unauthorized").retryable is False
+    assert ProviderError("API key not valid").retryable is False

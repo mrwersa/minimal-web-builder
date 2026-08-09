@@ -101,8 +101,9 @@ Goal: generation is observable, cancellable, measurable, and structurally safe.
 - ⬜ Replace full-document rewrites with typed insert/update/move/delete patches.
 - ⬜ Stream job progress and support cancellation, retry, and recovery after navigation.
 - 🔄 Add durable workers, provider timeouts, fallback policy, and concurrency limits.
-  Provider timeouts and concurrency limits are configurable and enforced; durable
-  workers and fallback policy remain.
+  Provider timeouts and concurrency limits are configurable and enforced, and
+  transient provider failures retry with exponential backoff while permanent ones
+  fail fast. Durable workers and model-level fallback remain.
 - ⬜ Add visual-quality, responsiveness, accessibility, and instruction-following fixtures.
 - ⬜ Add screenshot and visual-regression checks for representative pages.
 - 🔄 Track latency, token usage, cost, acceptance, undo-after-generation, and failures.

@@ -19,6 +19,8 @@ class GenerationEvent:
     complexity_key: str | None = None
     strict_minimal: bool | None = None
     provider: str | None = None
+    #: 1-based provider attempt this event describes; >1 means a retry.
+    attempt: int | None = None
     error: str | None = None
     timestamp: float = field(default_factory=time.time)
 

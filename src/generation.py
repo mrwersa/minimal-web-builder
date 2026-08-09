@@ -21,6 +21,38 @@ from src.theme import (
 _LANGUAGE_FENCE_RE = re.compile(r"^[A-Za-z][A-Za-z0-9+#.-]*$")
 
 DEFAULT_GENERATION_TIMEOUT_SECONDS = 120
+#: Attempts default to 1 so importing this module changes nothing on its own;
+#: the server passes its configured value from AppConfig.
+DEFAULT_GENERATION_MAX_ATTEMPTS = 1
+DEFAULT_RETRY_BACKOFF_SECONDS = 0.5
+
+#: Substrings that mark a provider failure as permanent. Retrying a rejected
+#: credential only multiplies the latency of a request that cannot succeed.
+_PERMANENT_ERROR_MARKERS = (
+    "401",
+    "403",
+    "unauthorized",
+    "forbidden",
+    "invalid api key",
+    "invalid_api_key",
+    "api key not valid",
+    "api_key_invalid",
+)
+
+
+class ProviderError(RuntimeError):
+    """A generation provider call failed.
+
+    Raised internally so the retry loop can see failures; the public
+    ``call_gemini`` functions still return an ``API error:`` string.
+    """
+
+    def __init__(self, message: str) -> None:
+        super().__init__(message)
+        self.retryable = not any(
+            marker in message.lower() for marker in _PERMANENT_ERROR_MARKERS
+        )
+
 
 BASE_PROMPT = (
     "You are an expert web app developer and UI designer specializing in minimalist, clean designs.\n"
@@ -151,11 +183,7 @@ def _generate_content(
     prompt: str,
     temperature: float,
     max_output_tokens: int,
-    analytics_file: str | None = None,
-    event_meta: dict[str, str | bool | None] | None = None,
 ) -> str:
-    meta = dict(event_meta or {})
-    start = time.perf_counter()
     try:
         response = model.generate_content(
             prompt,
@@ -164,28 +192,9 @@ def _generate_content(
                 max_output_tokens=max_output_tokens,
             ),
         )
-        text = response.text
-    except Exception as exc:  # noqa: BLE001 - surface any provider error as a friendly message
-        record(
-            GenerationEvent(
-                event="generation.error",
-                duration_ms=int((time.perf_counter() - start) * 1000),
-                error=str(exc),
-                **meta,
-            ),
-            analytics_file=analytics_file,
-        )
-        return f"API error: {exc}"
-    record(
-        GenerationEvent(
-            event="generation.success",
-            duration_ms=int((time.perf_counter() - start) * 1000),
-            output_chars=len(text),
-            **meta,
-        ),
-        analytics_file=analytics_file,
-    )
-    return text
+        return response.text
+    except Exception as exc:
+        raise ProviderError(str(exc)) from exc
 
 
 def _generate_content_openrouter(
@@ -196,13 +205,9 @@ def _generate_content_openrouter(
     api_key: str,
     model: str,
     base_url: str = DEFAULT_OPENROUTER_BASE_URL,
-    analytics_file: str | None = None,
-    event_meta: dict[str, str | bool | None] | None = None,
     timeout_seconds: int = DEFAULT_GENERATION_TIMEOUT_SECONDS,
 ) -> str:
     """Generate via OpenRouter's OpenAI-compatible chat completions endpoint."""
-    meta = dict(event_meta or {})
-    start = time.perf_counter()
     payload = {
         "model": model,
         "messages": [{"role": "user", "content": prompt}],
@@ -221,28 +226,34 @@ def _generate_content_openrouter(
     try:
         with urllib.request.urlopen(request, timeout=timeout_seconds) as response:
             body = json.loads(response.read().decode("utf-8"))
-        text = body["choices"][0]["message"]["content"]
-    except Exception as exc:  # noqa: BLE001 - surface any provider error as a friendly message
-        record(
-            GenerationEvent(
-                event="generation.error",
-                duration_ms=int((time.perf_counter() - start) * 1000),
-                error=str(exc),
-                **meta,
-            ),
-            analytics_file=analytics_file,
+        return body["choices"][0]["message"]["content"]
+    except Exception as exc:
+        raise ProviderError(str(exc)) from exc
+
+
+def _invoke_provider(
+    provider: str,
+    prompt: str,
+    temperature: float,
+    max_output_tokens: int,
+    *,
+    model: Any,
+    genai: Any,
+    api_key: str,
+    base_url: str,
+    timeout_seconds: int,
+) -> str:
+    if provider == OPENROUTER_PROVIDER:
+        return _generate_content_openrouter(
+            prompt,
+            temperature,
+            max_output_tokens,
+            api_key=api_key,
+            model=str(model),
+            base_url=base_url,
+            timeout_seconds=timeout_seconds,
         )
-        return f"API error: {exc}"
-    record(
-        GenerationEvent(
-            event="generation.success",
-            duration_ms=int((time.perf_counter() - start) * 1000),
-            output_chars=len(text),
-            **meta,
-        ),
-        analytics_file=analytics_file,
-    )
-    return text
+    return _generate_content(model, genai, prompt, temperature, max_output_tokens)
 
 
 def _generate(
@@ -258,28 +269,60 @@ def _generate(
     analytics_file: str | None,
     event_meta: dict[str, str | bool | None] | None,
     timeout_seconds: int = DEFAULT_GENERATION_TIMEOUT_SECONDS,
+    max_attempts: int = DEFAULT_GENERATION_MAX_ATTEMPTS,
+    retry_backoff_seconds: float = DEFAULT_RETRY_BACKOFF_SECONDS,
 ) -> str:
-    if provider == OPENROUTER_PROVIDER:
-        return _generate_content_openrouter(
-            prompt,
-            temperature,
-            max_output_tokens,
-            api_key=api_key,
-            model=str(model),
-            base_url=base_url,
+    """Call the provider, retrying transient failures with exponential backoff.
+
+    Every attempt emits its own analytics event, so a generation that only
+    succeeded on the third try is distinguishable from one that succeeded
+    outright. Permanent failures (a rejected key) break out immediately.
+    """
+    meta = dict(event_meta or {})
+    attempts = max(1, max_attempts)
+    last_error = "generation did not run"
+    for attempt in range(1, attempts + 1):
+        start = time.perf_counter()
+        try:
+            text = _invoke_provider(
+                provider,
+                prompt,
+                temperature,
+                max_output_tokens,
+                model=model,
+                genai=genai,
+                api_key=api_key,
+                base_url=base_url,
+                timeout_seconds=timeout_seconds,
+            )
+        except ProviderError as exc:
+            last_error = str(exc)
+            record(
+                GenerationEvent(
+                    event="generation.error",
+                    duration_ms=int((time.perf_counter() - start) * 1000),
+                    error=last_error,
+                    attempt=attempt,
+                    **meta,
+                ),
+                analytics_file=analytics_file,
+            )
+            if not exc.retryable or attempt == attempts:
+                break
+            time.sleep(retry_backoff_seconds * (2 ** (attempt - 1)))
+            continue
+        record(
+            GenerationEvent(
+                event="generation.success",
+                duration_ms=int((time.perf_counter() - start) * 1000),
+                output_chars=len(text),
+                attempt=attempt,
+                **meta,
+            ),
             analytics_file=analytics_file,
-            event_meta=event_meta,
-            timeout_seconds=timeout_seconds,
         )
-    return _generate_content(
-        model,
-        genai,
-        prompt,
-        temperature,
-        max_output_tokens,
-        analytics_file=analytics_file,
-        event_meta=event_meta,
-    )
+        return text
+    return f"API error: {last_error}"
 
 
 def call_gemini(
@@ -298,6 +341,8 @@ def call_gemini(
     api_key: str = "",
     base_url: str = DEFAULT_OPENROUTER_BASE_URL,
     timeout_seconds: int = DEFAULT_GENERATION_TIMEOUT_SECONDS,
+    max_attempts: int = DEFAULT_GENERATION_MAX_ATTEMPTS,
+    retry_backoff_seconds: float = DEFAULT_RETRY_BACKOFF_SECONDS,
 ) -> str:
     prompt = build_generation_prompt(
         messages,
@@ -317,6 +362,8 @@ def call_gemini(
         base_url=base_url,
         analytics_file=analytics_file,
         timeout_seconds=timeout_seconds,
+        max_attempts=max_attempts,
+        retry_backoff_seconds=retry_backoff_seconds,
         event_meta={
             "tone_key": tone_key,
             "complexity_key": complexity_key,
@@ -345,6 +392,8 @@ def call_gemini_for_section(
     api_key: str = "",
     base_url: str = DEFAULT_OPENROUTER_BASE_URL,
     timeout_seconds: int = DEFAULT_GENERATION_TIMEOUT_SECONDS,
+    max_attempts: int = DEFAULT_GENERATION_MAX_ATTEMPTS,
+    retry_backoff_seconds: float = DEFAULT_RETRY_BACKOFF_SECONDS,
 ) -> str:
     prompt = build_section_regeneration_prompt(
         current_code,
@@ -367,6 +416,8 @@ def call_gemini_for_section(
         base_url=base_url,
         analytics_file=analytics_file,
         timeout_seconds=timeout_seconds,
+        max_attempts=max_attempts,
+        retry_backoff_seconds=retry_backoff_seconds,
         event_meta={
             "tone_key": tone_key,
             "complexity_key": complexity_key,
