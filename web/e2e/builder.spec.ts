@@ -1,5 +1,18 @@
 import { expect, test } from "@playwright/test";
 
+/**
+ * Generation is asynchronous: the POST returns a job id and the client polls.
+ * These helpers keep the mocks honest about that lifecycle.
+ */
+let nextJobId = 0;
+const jobResults = new Map<string, unknown>();
+
+function queueJob(result: unknown): { job_id: string; status: string } {
+  const jobId = `job-${(nextJobId += 1)}`;
+  jobResults.set(jobId, result);
+  return { job_id: jobId, status: "queued" };
+}
+
 const initialHtml = "<!doctype html><html><body><h1>Fern Coffee</h1></body></html>";
 const editedHtml =
   "<!doctype html><html><body><h1>Fern Coffee Roasters</h1></body></html>";
@@ -64,7 +77,8 @@ test("generate, edit, undo, and export the page", async ({ page }) => {
   await page.route("**/api/generate", (route) => {
     conversationHtml = initialHtml;
     return route.fulfill({
-      json: {
+      status: 202,
+      json: queueJob({
         html: initialHtml,
         notes: [],
         safety_alerts: [],
@@ -74,7 +88,7 @@ test("generate, edit, undo, and export the page", async ({ page }) => {
           strict_minimal: false,
           profile: null,
         },
-      },
+      }),
     });
   });
   await page.route("**/api/chat", (route) => {
@@ -92,14 +106,15 @@ test("generate, edit, undo, and export the page", async ({ page }) => {
     }
     conversationHtml = responseHtml;
     return route.fulfill({
-      json: {
+      status: 202,
+      json: queueJob({
         html: responseHtml,
         message: "Updated the heading.",
         intent: "refine",
         validation_errors: [],
         validation_notes: [],
         error: null,
-      },
+      }),
     });
   });
   await page.route("**/api/export", async (route) => {
@@ -115,6 +130,26 @@ test("generate, edit, undo, and export the page", async ({ page }) => {
     expect(request.html).not.toContain("data-mwb-id");
     await route.fulfill({
       json: { mode: request.mode, files: { "index.html": request.html } },
+    });
+  });
+
+  await page.route("**/api/generation-jobs/active", (route) =>
+    route.fulfill({ json: { job: null } }),
+  );
+  await page.route("**/api/generation-jobs/*", (route) => {
+    const jobId = new URL(route.request().url()).pathname.split("/").pop() ?? "";
+    return route.fulfill({
+      json: {
+        id: jobId,
+        operation: "generate",
+        status: "succeeded",
+        result: jobResults.get(jobId) ?? null,
+        error: null,
+        failure_kind: null,
+        duration_ms: 12,
+        metrics: null,
+        cancel_requested: false,
+      },
     });
   });
 

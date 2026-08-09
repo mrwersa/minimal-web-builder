@@ -5,6 +5,7 @@ from __future__ import annotations
 import math
 import time
 from collections.abc import Callable
+from concurrent.futures import ThreadPoolExecutor
 from typing import Any, TypeVar
 
 from sqlalchemy import select, update
@@ -27,28 +28,69 @@ FAILURE_VALIDATION = "validation"
 FAILURE_INTERRUPTED = "interrupted"
 FAILURE_INTERNAL = "internal"
 
+STATUS_QUEUED = "queued"
+STATUS_RUNNING = "running"
+STATUS_SUCCEEDED = "succeeded"
+STATUS_FAILED = "failed"
+STATUS_CANCELLED = "cancelled"
+TERMINAL_STATUSES = frozenset({STATUS_SUCCEEDED, STATUS_FAILED, STATUS_CANCELLED})
+
 
 class ConversationValidationError(ValueError):
     pass
 
 
+class JobNotFoundError(LookupError):
+    pass
+
+
+class GenerationCancelled(Exception):
+    """Raised inside a job when the client has asked for it to stop."""
+
+
+class CancellationToken:
+    """Lets running work notice a cancellation the client requested.
+
+    Cancellation is cooperative: a provider call already in flight cannot be
+    interrupted, so work checks this at points where abandoning is still clean —
+    before starting, and before committing side effects.
+    """
+
+    def __init__(self, is_cancelled: Callable[[], bool]) -> None:
+        self._is_cancelled = is_cancelled
+
+    @property
+    def cancelled(self) -> bool:
+        return self._is_cancelled()
+
+    def raise_if_cancelled(self) -> None:
+        if self.cancelled:
+            raise GenerationCancelled()
+
+
 def _summarize(records: list[GenerationJobRecord]) -> dict[str, Any]:
-    succeeded = sum(1 for item in records if item.status == "succeeded")
-    failed = sum(1 for item in records if item.status == "failed")
-    running = sum(1 for item in records if item.status == "running")
+    succeeded = sum(1 for item in records if item.status == STATUS_SUCCEEDED)
+    failed = sum(1 for item in records if item.status == STATUS_FAILED)
+    running = sum(
+        1 for item in records if item.status in (STATUS_QUEUED, STATUS_RUNNING)
+    )
+    cancelled = sum(1 for item in records if item.status == STATUS_CANCELLED)
     # Latency is only meaningful for jobs that ran to completion; a failure can
     # return in milliseconds and would otherwise flatter the percentiles.
     durations = [
         item.duration_ms
         for item in records
-        if item.status == "succeeded" and item.duration_ms is not None
+        if item.status == STATUS_SUCCEEDED and item.duration_ms is not None
     ]
+    # A user changing their mind is not a reliability signal, so cancellations
+    # stay out of the success rate entirely.
     settled = succeeded + failed
     return {
         "total": len(records),
         "succeeded": succeeded,
         "failed": failed,
         "running": running,
+        "cancelled": cancelled,
         "success_rate": round(succeeded / settled, 4) if settled else None,
         "p50_ms": _percentile(durations, 50),
         "p95_ms": _percentile(durations, 95),
@@ -89,6 +131,20 @@ def _result_metrics(result: Any) -> dict[str, int]:
     }
 
 
+def _job_snapshot(job: GenerationJobRecord) -> dict[str, Any]:
+    return {
+        "id": job.id,
+        "operation": job.operation,
+        "status": job.status,
+        "result": job.result,
+        "error": job.error,
+        "failure_kind": job.failure_kind,
+        "duration_ms": job.duration_ms,
+        "metrics": job.metrics,
+        "cancel_requested": bool(job.cancel_requested),
+    }
+
+
 def _elapsed_ms(started: float) -> int:
     return int((time.perf_counter() - started) * 1000)
 
@@ -121,48 +177,145 @@ def _message_snapshot(message: Any) -> dict[str, str]:
 
 
 class GenerationOrchestrator:
-    def __init__(self, sessions: sessionmaker[Session]):
-        self._sessions = sessions
+    """Runs generations on a bounded worker pool and tracks them durably.
 
-    def execute(
+    Generation used to block the request that started it, so a slow provider
+    held an HTTP connection (and a worker thread) for as long as it took, and
+    there was no way to stop it. Work now runs on the pool and the client polls
+    the job, which is what makes cancellation and recovery-after-navigation
+    possible at all.
+    """
+
+    def __init__(
+        self, sessions: sessionmaker[Session], *, max_workers: int = 4
+    ) -> None:
+        self._sessions = sessions
+        # The pool size *is* the generation concurrency limit; further
+        # submissions queue rather than oversubscribing the provider.
+        self._executor = ThreadPoolExecutor(
+            max_workers=max(1, max_workers), thread_name_prefix="generation"
+        )
+
+    def shutdown(self) -> None:
+        self._executor.shutdown(wait=False, cancel_futures=True)
+
+    def submit(
         self,
         owner_id: str,
         operation: str,
         request: dict[str, Any],
-        work: Callable[[], T],
+        work: Callable[[CancellationToken], T],
         *,
         conversation_id: str | None = None,
-    ) -> T:
+    ) -> str:
+        """Queue a generation and return its job ID immediately."""
         job_id = self._start_job(owner_id, operation, request, conversation_id)
+        self._executor.submit(self._run_job, job_id, work)
+        return job_id
+
+    def _run_job(self, job_id: str, work: Callable[[CancellationToken], T]) -> None:
+        token = CancellationToken(lambda: self._is_cancel_requested(job_id))
+        if token.cancelled:
+            self._finish_job(job_id, status=STATUS_CANCELLED)
+            return
+
+        self._mark_running(job_id)
         started = time.perf_counter()
         try:
-            result = work()
-        except Exception as exc:
+            result = work(token)
+        except GenerationCancelled:
+            self._finish_job(
+                job_id, status=STATUS_CANCELLED, duration_ms=_elapsed_ms(started)
+            )
+            return
+        except Exception as exc:  # noqa: BLE001 - recorded, not swallowed
             self._finish_job(
                 job_id,
-                status="failed",
+                status=STATUS_FAILED,
                 error=str(getattr(exc, "detail", None) or exc),
                 failure_kind=classify_failure(exc),
                 duration_ms=_elapsed_ms(started),
             )
-            raise
+            return
+
+        # A cancel that lands while the provider was mid-response still counts:
+        # the client has moved on, so the result is discarded rather than
+        # surfacing as a change nobody asked for.
+        if token.cancelled:
+            self._finish_job(
+                job_id, status=STATUS_CANCELLED, duration_ms=_elapsed_ms(started)
+            )
+            return
+
         self._finish_job(
             job_id,
-            status="succeeded",
+            status=STATUS_SUCCEEDED,
             result=result,
             duration_ms=_elapsed_ms(started),
             metrics=_result_metrics(result),
         )
-        return result
+
+    def request_cancel(self, owner_id: str, job_id: str) -> dict[str, Any]:
+        with self._sessions.begin() as session:
+            job = session.get(GenerationJobRecord, job_id)
+            if job is None or job.owner_id != owner_id:
+                raise JobNotFoundError("Generation job not found")
+            if job.status in TERMINAL_STATUSES:
+                return _job_snapshot(job)
+            job.cancel_requested = True
+            # A queued job has not reached a worker, so it can be settled now
+            # instead of waiting for one to pick it up and immediately drop it.
+            if job.status == STATUS_QUEUED:
+                job.status = STATUS_CANCELLED
+                job.finished_at = utcnow()
+            job.updated_at = utcnow()
+            return _job_snapshot(job)
+
+    def get_job(self, owner_id: str, job_id: str) -> dict[str, Any] | None:
+        with self._sessions() as session:
+            job = session.get(GenerationJobRecord, job_id)
+            if job is None or job.owner_id != owner_id:
+                return None
+            return _job_snapshot(job)
+
+    def active_job(self, owner_id: str) -> dict[str, Any] | None:
+        """The job a reloaded browser should reattach to, if any."""
+        with self._sessions() as session:
+            job = session.scalars(
+                select(GenerationJobRecord)
+                .where(
+                    GenerationJobRecord.owner_id == owner_id,
+                    GenerationJobRecord.status.in_([STATUS_QUEUED, STATUS_RUNNING]),
+                )
+                .order_by(GenerationJobRecord.created_at.desc())
+                .limit(1)
+            ).first()
+            return _job_snapshot(job) if job is not None else None
+
+    def _is_cancel_requested(self, job_id: str) -> bool:
+        with self._sessions() as session:
+            job = session.get(GenerationJobRecord, job_id)
+            return bool(job is not None and job.cancel_requested)
+
+    def _mark_running(self, job_id: str) -> None:
+        with self._sessions.begin() as session:
+            job = session.get(GenerationJobRecord, job_id)
+            if job is not None:
+                job.status = STATUS_RUNNING
+                job.updated_at = utcnow()
 
     def recover_interrupted_jobs(self) -> int:
-        """Mark jobs left running by a stopped process as failed."""
+        """Settle jobs a stopped process left behind.
+
+        Queued jobs are included: their worker never existed, so nothing will
+        ever pick them up.
+        """
         with self._sessions.begin() as session:
             result = session.execute(
                 update(GenerationJobRecord)
-                .where(GenerationJobRecord.status == "running")
+                .where(GenerationJobRecord.status.in_([STATUS_QUEUED, STATUS_RUNNING]))
                 .values(
-                    status="failed",
+                    status=STATUS_FAILED,
                     error="Generation interrupted by server restart",
                     failure_kind=FAILURE_INTERRUPTED,
                     finished_at=utcnow(),
@@ -171,7 +324,7 @@ class GenerationOrchestrator:
             )
             return result.rowcount
 
-    def chat(
+    def submit_chat(
         self,
         owner_id: str,
         thread_id: str,
@@ -180,12 +333,12 @@ class GenerationOrchestrator:
         settings: dict[str, Any],
         client: GenerationClient,
         target_node_id: str | None = None,
-    ) -> dict[str, Any]:
+    ) -> str:
         clean_thread_id = _thread_id(thread_id)
         conversation = self._get_or_create_conversation(owner_id, clean_thread_id)
         set_client(client)
 
-        def work() -> dict[str, Any]:
+        def work(token: CancellationToken) -> dict[str, Any]:
             state = run_agent(
                 user_input,
                 thread_id=clean_thread_id,
@@ -200,6 +353,9 @@ class GenerationOrchestrator:
                 if (snapshot := _message_snapshot(item))["role"]
                 in {"user", "assistant"}
             ]
+            # The conversation is the one durable side effect of a chat turn,
+            # so it is the last thing checked before committing.
+            token.raise_if_cancelled()
             next_code = state.get("current_code")
             self._save_conversation(
                 conversation.id,
@@ -220,7 +376,7 @@ class GenerationOrchestrator:
                 "error": state.get("error"),
             }
 
-        return self.execute(
+        return self.submit(
             owner_id,
             "chat",
             {
@@ -390,7 +546,7 @@ class GenerationOrchestrator:
                 owner_id=owner_id,
                 conversation_id=conversation_id,
                 operation=operation,
-                status="running",
+                status=STATUS_QUEUED,
                 request=request,
             )
             session.add(job)

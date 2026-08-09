@@ -38,6 +38,9 @@ interface State {
   // drive it and the framing survives switching between preview and editing.
   viewport: CanvasViewport;
   zoom: number;
+  // The generation currently running server-side, if any. Kept so the user can
+  // stop it and so a reload can reattach to work already in flight.
+  activeJobId: string | null;
 
   code: string | null;
   editorDocument: EditorDocumentV1 | null;
@@ -101,6 +104,8 @@ interface State {
   createCheckpoint: () => Promise<void>;
   duplicateRevision: (revisionId: string, sequence: number) => Promise<void>;
   runChat: (message: string, targetNodeId?: string) => Promise<void>;
+  cancelGeneration: () => Promise<void>;
+  reattachToRunningJob: () => Promise<void>;
   restoreConversation: () => Promise<void>;
   clearChat: () => void;
   undo: () => void;
@@ -166,6 +171,23 @@ function retainedNodeId(
   return nodeId && findNode(document, nodeId) ? nodeId : null;
 }
 
+/**
+ * A cancelled generation is a user decision, not a failure, so it clears the
+ * busy state without raising an error toast.
+ */
+function cancellationAware(error: unknown): {
+  busy: boolean;
+  activeJobId: null;
+  error?: string;
+} {
+  // Matched by name rather than instanceof: the class identity is not stable
+  // across module boundaries, and this must not depend on how api is loaded.
+  if (error instanceof Error && error.name === "GenerationCancelledError") {
+    return { busy: false, activeJobId: null };
+  }
+  return { busy: false, activeJobId: null, error: errorMessage(error) };
+}
+
 export const useStore = create<State>((set, get) => ({
   options: null,
   optionsError: null,
@@ -186,6 +208,7 @@ export const useStore = create<State>((set, get) => ({
   selectedNodeId: null,
   viewport: "desktop",
   zoom: 1,
+  activeJobId: null,
 
   code: null,
   editorDocument: null,
@@ -250,11 +273,16 @@ export const useStore = create<State>((set, get) => ({
         current_code: s.code,
         layout_dna_guidance: s.layoutDnaGuidance,
         thread_id: s.threadId,
-      });
+      }, (jobId) => set({ activeJobId: jobId }));
       get().setCodeWithHistory(res.html);
-      set({ notes: res.notes, safetyAlerts: res.safety_alerts, busy: false });
+      set({
+        notes: res.notes,
+        safetyAlerts: res.safety_alerts,
+        busy: false,
+        activeJobId: null,
+      });
     } catch (e) {
-      set({ busy: false, error: errorMessage(e) });
+      set(cancellationAware(e));
     }
   },
 
@@ -275,11 +303,16 @@ export const useStore = create<State>((set, get) => ({
           density: s.constraintDensity,
         },
         thread_id: s.threadId,
-      });
+      }, (jobId) => set({ activeJobId: jobId }));
       get().setCodeWithHistory(res.html);
-      set({ notes: res.notes, safetyAlerts: res.safety_alerts, busy: false });
+      set({
+        notes: res.notes,
+        safetyAlerts: res.safety_alerts,
+        busy: false,
+        activeJobId: null,
+      });
     } catch (e) {
-      set({ busy: false, error: errorMessage(e) });
+      set(cancellationAware(e));
     }
   },
 
@@ -317,11 +350,16 @@ export const useStore = create<State>((set, get) => ({
         layout_dna_guidance: s.layoutDnaGuidance,
         refine_aspect: s.refineAspect,
         thread_id: s.threadId,
-      });
+      }, (jobId) => set({ activeJobId: jobId }));
       get().setCodeWithHistory(res.html);
-      set({ notes: res.notes, safetyAlerts: res.safety_alerts, busy: false });
+      set({
+        notes: res.notes,
+        safetyAlerts: res.safety_alerts,
+        busy: false,
+        activeJobId: null,
+      });
     } catch (e) {
-      set({ busy: false, error: errorMessage(e) });
+      set(cancellationAware(e));
     }
   },
 
@@ -672,7 +710,7 @@ export const useStore = create<State>((set, get) => ({
         profile: s.profile,
         layout_dna_guidance: s.layoutDnaGuidance,
         target_node_id: targetNodeId,
-      });
+      }, (jobId) => set({ activeJobId: jobId }));
       const assistantMsg: api.ChatMessage = { role: "assistant", content: res.message };
       if (res.html) get().setCodeWithHistory(res.html);
       set({
@@ -680,14 +718,44 @@ export const useStore = create<State>((set, get) => ({
         busy: false,
         notes: res.validation_notes,
         safetyAlerts: res.validation_errors,
+        activeJobId: null,
       });
       if (res.error) set({ error: res.error });
     } catch (e) {
-      set({ busy: false, error: errorMessage(e) });
+      set(cancellationAware(e));
+    }
+  },
+
+  cancelGeneration: async () => {
+    const jobId = get().activeJobId;
+    if (!jobId) return;
+    try {
+      await api.cancelJob(jobId);
+    } catch (e) {
+      set({ error: errorMessage(e) });
+    }
+  },
+
+  reattachToRunningJob: async () => {
+    // Best effort, and deliberately isolated: failing to find a running job
+    // must never cost the user their restored conversation.
+    try {
+      const running = await api.fetchActiveJob();
+      if (!running) return;
+      set({ busy: true, activeJobId: running.id });
+      const result = await api.awaitJob<{ html?: string | null }>(
+        running.id,
+        "Generation failed",
+      );
+      if (result?.html) get().setCodeWithHistory(result.html);
+      set({ busy: false, activeJobId: null });
+    } catch (e) {
+      set(cancellationAware(e));
     }
   },
 
   restoreConversation: async () => {
+    void get().reattachToRunningJob();
     try {
       const conversation = await api.fetchConversation(get().threadId);
       if (!conversation) return;

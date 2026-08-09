@@ -50,6 +50,7 @@ A sleek, minimalist web application builder powered by AI (Gemini / OpenRouter).
 - Durable per-generation latency, outcome, and failure-cause metrics with a queryable success-rate and P50/P95 summary
 - Configurable provider timeouts and a bounded generation concurrency limit
 - Automatic retry with jittered exponential backoff for transient provider failures, skipped for permanent ones and bounded by an overall deadline
+- Generation runs on background workers: submit, poll, stop a run in progress, and reattach to one still running after a reload
 
 
 ## Setup
@@ -124,7 +125,7 @@ To edit the generated page directly, turn on **WYSIWYG editing** in the sidebar 
 5. Describe refinements in the chat bar — the agent applies them to the current page.
 6. Export your page as a single HTML file or split into HTML/CSS/JS.
 7. When a project is active, document changes autosave with an expected version so stale browser sessions cannot silently overwrite newer work.
-8. Conversation state, standalone edits, and generation outcomes are checkpointed in the database, so a browser or server restart restores the active thread.
+8. Conversation state, standalone edits, and generation outcomes are checkpointed in the database, so a browser or server restart restores the active thread. Generation itself runs on a background worker, so `/api/generate`, `/api/generate-section`, and `/api/chat` return `202` with a job ID that the client polls, cancels, or reattaches to.
 9. Mutating requests carry idempotency keys, sensitive generation/authentication routes are rate-limited, and mutation outcomes are written to owner-scoped audit history.
 
 ## Technologies

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import time
 from dataclasses import replace
 
 import pytest
@@ -7,7 +8,6 @@ from fastapi.testclient import TestClient
 
 from server.assets import ReusableAssetService
 from server.auth import AuthService
-from server.concurrency import GenerationLimiter
 from server.controls import RequestControlService
 from server.database import Database
 from server.main import app
@@ -46,7 +46,6 @@ def client(monkeypatch: pytest.MonkeyPatch, tmp_path):
     app.state.assets = ReusableAssetService(database.sessions)
     app.state.orchestrator = GenerationOrchestrator(database.sessions)
     app.state.controls = RequestControlService(database.sessions)
-    app.state.generation_limiter = GenerationLimiter(cfg.generation_max_concurrency)
     test_client = TestClient(app)
     response = test_client.post(
         "/api/auth/register",
@@ -58,6 +57,25 @@ def client(monkeypatch: pytest.MonkeyPatch, tmp_path):
     finally:
         test_client.close()
         database.close()
+
+
+TERMINAL = {"succeeded", "failed", "cancelled"}
+
+
+def run_generation(
+    client: TestClient, path: str, payload: dict, timeout: float = 10.0
+) -> dict:
+    """Submit a generation and wait for the background job to settle."""
+    response = client.post(path, json=payload)
+    assert response.status_code == 202, response.text
+    job_id = response.json()["job_id"]
+    deadline = time.time() + timeout
+    while time.time() < deadline:
+        job = client.get(f"/api/generation-jobs/{job_id}").json()
+        if job["status"] in TERMINAL:
+            return job
+        time.sleep(0.01)
+    raise AssertionError(f"job {job_id} never settled")
 
 
 def test_health(client: TestClient) -> None:
@@ -103,19 +121,19 @@ def test_generate_uses_mocked_output(
         "server.main.generate",
         lambda *a, **k: "<!doctype html><html><body><h1>Hi</h1></body></html>",
     )
-    r = client.post(
+    job = run_generation(
+        client,
         "/api/generate",
-        json={"prompt": "a coffee shop landing page", "thread_id": "generate-thread"},
+        {"prompt": "a coffee shop landing page", "thread_id": "generate-thread"},
     )
-    assert r.status_code == 200
-    j = r.json()
-    assert "<h1>Hi</h1>" in j["html"]
-    assert j["settings"]["tone"] == "minimal"
+    assert job["status"] == "succeeded"
+    result = job["result"]
+    assert "<h1>Hi</h1>" in result["html"]
+    assert result["settings"]["tone"] == "minimal"
     checkpoint = client.get("/api/conversations/generate-thread").json()
-    assert checkpoint["current_code"] == j["html"]
+    assert checkpoint["current_code"] == result["html"]
     jobs = client.get("/api/generation-jobs").json()["jobs"]
     assert jobs[0]["operation"] == "generate"
-    assert jobs[0]["status"] == "succeeded"
 
 
 def test_generate_rejects_empty_prompt(client: TestClient) -> None:
@@ -131,9 +149,10 @@ def test_generate_accepts_constraints_without_prompt(
         "server.main.generate",
         lambda *a, **k: "<!doctype html><html><body><h1>Constrained</h1></body></html>",
     )
-    r = client.post(
+    job = run_generation(
+        client,
         "/api/generate",
-        json={
+        {
             "constraints": {
                 "sections": ["hero", "footer"],
                 "color_limit": "single-accent",
@@ -141,18 +160,18 @@ def test_generate_accepts_constraints_without_prompt(
             }
         },
     )
-    assert r.status_code == 200
-    assert "Constrained" in r.json()["html"]
+    assert "Constrained" in job["result"]["html"]
 
 
 def test_generate_propagates_api_errors(
     client: TestClient, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setattr("server.main.generate", lambda *a, **k: "API error: boom")
-    r = client.post("/api/generate", json={"prompt": "x"})
-    assert r.status_code == 502
-    assert "boom" in r.json()["detail"]
-    job = client.get("/api/generation-jobs").json()["jobs"][0]
+
+    job = run_generation(client, "/api/generate", {"prompt": "x"})
+
+    # The provider failure is now reported on the job rather than as the status
+    # of the submission, which succeeded.
     assert job["status"] == "failed"
     assert job["failure_kind"] == "provider"
     assert job["error"] == "API error: boom"
@@ -165,14 +184,9 @@ def test_generation_job_stats_report_outcomes_and_latency(
         "server.main.generate",
         lambda *a, **k: "<!doctype html><html><body><h1>Hi</h1></body></html>",
     )
-    assert (
-        client.post("/api/generate", json={"prompt": "a landing page"}).status_code
-        == 200
-    )
+    run_generation(client, "/api/generate", {"prompt": "a landing page"})
     monkeypatch.setattr("server.main.generate", lambda *a, **k: "API error: boom")
-    assert (
-        client.post("/api/generate", json={"prompt": "another page"}).status_code == 502
-    )
+    run_generation(client, "/api/generate", {"prompt": "another page"})
 
     stats = client.get("/api/generation-jobs/stats").json()
 
@@ -198,13 +212,13 @@ def test_generate_section_replaces_section(
         "server.main.regenerate_section",
         lambda *a, **k: "<header>NEW</header>",
     )
-    r = client.post(
+    job = run_generation(
+        client,
         "/api/generate-section",
-        json={"code": code, "section_index": 0, "instructions": "make it new"},
+        {"code": code, "section_index": 0, "instructions": "make it new"},
     )
-    assert r.status_code == 200
-    assert "<header>NEW</header>" in r.json()["html"]
-    assert "OLD" not in r.json()["html"]
+    assert "<header>NEW</header>" in job["result"]["html"]
+    assert "OLD" not in job["result"]["html"]
 
 
 def test_generate_section_bad_index(client: TestClient) -> None:
@@ -258,13 +272,12 @@ def test_layout_dna_round_trip(client: TestClient) -> None:
 
 
 def test_chat_checkpoint_and_job_are_durable(client: TestClient) -> None:
-    response = client.post(
-        "/api/chat",
-        json={"message": "hello", "thread_id": "conversation-1"},
+    job = run_generation(
+        client, "/api/chat", {"message": "hello", "thread_id": "conversation-1"}
     )
 
-    assert response.status_code == 200
-    assert response.json()["intent"] == "answer"
+    assert job["status"] == "succeeded"
+    assert job["result"]["intent"] == "answer"
     draft = client.put(
         "/api/conversations/conversation-1/document",
         json={
@@ -531,11 +544,8 @@ def test_reusable_assets_are_isolated_between_users(client: TestClient) -> None:
 
 
 def test_conversations_and_jobs_are_isolated_between_users(client: TestClient) -> None:
-    assert (
-        client.post(
-            "/api/chat", json={"message": "hello", "thread_id": "private-thread"}
-        ).status_code
-        == 200
+    run_generation(
+        client, "/api/chat", {"message": "hello", "thread_id": "private-thread"}
     )
     client.post("/api/auth/logout")
     client.post(

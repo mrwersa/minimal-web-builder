@@ -107,13 +107,16 @@ describe("document revision workflows", () => {
 
     await useStore.getState().runConstraints();
 
-    expect(api.generate).toHaveBeenCalledWith(expect.objectContaining({
-      constraints: {
-        sections: ["hero", "footer"],
-        color_limit: "single-accent",
-        density: "balanced",
-      },
-    }));
+    expect(api.generate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        constraints: {
+          sections: ["hero", "footer"],
+          color_limit: "single-accent",
+          density: "balanced",
+        },
+      }),
+      expect.any(Function),
+    );
     expect(useStore.getState().code).toBe(canonical(generated.html));
   });
 
@@ -149,6 +152,7 @@ describe("document revision workflows", () => {
 
     expect(api.chat).toHaveBeenCalledWith(
       expect.objectContaining({ target_node_id: node.id }),
+      expect.any(Function),
     );
   });
 

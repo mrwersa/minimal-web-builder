@@ -7,6 +7,7 @@ from datetime import UTC, datetime
 
 from sqlalchemy import (
     JSON,
+    Boolean,
     DateTime,
     ForeignKey,
     Integer,
@@ -189,6 +190,9 @@ class GenerationJobRecord(Base):
     # Classifies *why* a job failed so the failure rate can be split by cause
     # rather than only counted. See server.orchestrator.classify_failure.
     failure_kind: Mapped[str | None] = mapped_column(String(32), index=True)
+    # Cooperative cancellation: the client sets this, the worker honours it at
+    # the next checkpoint. Durable so a cancel survives a restart mid-generation.
+    cancel_requested: Mapped[bool] = mapped_column(Boolean, default=False)
     duration_ms: Mapped[int | None] = mapped_column(Integer)
     finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     metrics: Mapped[dict | None] = mapped_column(JSON)
