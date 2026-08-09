@@ -285,3 +285,65 @@ def test_run_agent_calls_the_provider_once_for_a_persistent_provider_error(
     )
 
     assert calls["count"] == 1
+
+
+def test_prompt_messages_normalizes_langgraph_message_objects() -> None:
+    """LangGraph converts the dicts we seed the graph with into BaseMessage."""
+    from langgraph.graph.message import add_messages
+
+    from server.agent import _prompt_messages
+
+    merged = add_messages(
+        [],
+        [
+            {"role": "system", "content": "current code"},
+            {"role": "user", "content": "make it blue"},
+            {"role": "assistant", "content": "done"},
+        ],
+    )
+    assert not any(isinstance(message, dict) for message in merged)
+
+    assert _prompt_messages(merged) == [
+        {"role": "system", "content": "current code"},
+        {"role": "user", "content": "make it blue"},
+        {"role": "assistant", "content": "done"},
+    ]
+
+
+def test_prompt_messages_passes_plain_dicts_through() -> None:
+    from server.agent import _prompt_messages
+
+    assert _prompt_messages([{"role": "user", "content": "hi"}]) == [
+        {"role": "user", "content": "hi"}
+    ]
+    assert _prompt_messages(None) == []
+
+
+def test_run_agent_refine_builds_a_real_prompt(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Regression: every chat turn failed because the prompt builder indexes
+    messages as mappings while the graph stores BaseMessage objects.
+
+    Stubbing at the provider boundary rather than at ``server.agent.generate``
+    is what makes this catch the bug: the real prompt builder has to run.
+    """
+    captured: dict = {}
+
+    def fake_invoke_provider(provider, prompt, *args, **kwargs):
+        captured["prompt"] = prompt
+        return "<!doctype html><html><body><h1>Blue</h1></body></html>"
+
+    monkeypatch.setattr("src.generation._invoke_provider", fake_invoke_provider)
+    set_client(_mock_client())
+
+    result = run_agent(
+        "make the heading blue",
+        thread_id="regression",
+        current_code="<!doctype html><html><body><h1>Plain</h1></body></html>",
+        settings={"tone": "minimal", "complexity": "balanced"},
+        history=[{"role": "user", "content": "build a landing page"}],
+    )
+
+    assert result["error"] is None
+    assert "Blue" in (result["current_code"] or "")
+    assert "USER: make the heading blue" in captured["prompt"]
+    assert "SYSTEM: Here is the current version" in captured["prompt"]
