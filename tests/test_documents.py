@@ -31,3 +31,15 @@ def test_rejects_invalid_editor_documents(mutate, message: str) -> None:
 
     with pytest.raises(EditorDocumentValidationError, match=message):
         validate_editor_document(document)
+
+
+def test_validates_responsive_style_references() -> None:
+    document = editor_document()
+    document["responsiveStyles"] = {
+        "hero": {"mobile": {"display": "none", "padding": "12px"}}
+    }
+    assert validate_editor_document(document) is document
+
+    document["responsiveStyles"] = {"missing": {"watch": {"display": "none"}}}
+    with pytest.raises(EditorDocumentValidationError, match="existing element"):
+        validate_editor_document(document)

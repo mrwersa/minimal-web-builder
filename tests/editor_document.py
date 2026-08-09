@@ -16,4 +16,5 @@ def editor_document(node_id: str = "hero") -> dict:
         ],
         "css": ".hero { display: grid; }",
         "bodyScripts": ["<script>window.ready = true;</script>"],
+        "responsiveStyles": {},
     }

@@ -3,8 +3,6 @@ import { expect, test } from "@playwright/test";
 const initialHtml = "<!doctype html><html><body><h1>Fern Coffee</h1></body></html>";
 const editedHtml =
   "<!doctype html><html><body><h1>Fern Coffee Roasters</h1></body></html>";
-const portableInitialHtml =
-  "<!doctype html>\n<html>\n<head></head>\n<body><h1>Fern Coffee</h1></body></html>";
 
 test("generate, edit, undo, and export the page", async ({ page }) => {
   let conversationHtml: string | null = null;
@@ -95,7 +93,11 @@ test("generate, edit, undo, and export the page", async ({ page }) => {
   });
   await page.route("**/api/export", async (route) => {
     const request = route.request().postDataJSON() as { html: string; mode: string };
-    expect(request.html).toBe(portableInitialHtml);
+    expect(request.html).toContain("Fern Coffee");
+    expect(request.html).toContain("@media (max-width: 639px)");
+    expect(request.html).toContain("font-size: 24px;");
+    expect(request.html).toContain("mwb-node-");
+    expect(request.html).not.toContain("data-mwb-id");
     await route.fulfill({
       json: { mode: request.mode, files: { "index.html": request.html } },
     });
@@ -126,6 +128,26 @@ test("generate, edit, undo, and export the page", async ({ page }) => {
   ).toBeVisible();
   await page.getByTitle("Undo (Ctrl+Z)").click();
   await expect(preview.getByRole("heading", { name: "Fern Coffee", exact: true })).toBeVisible();
+
+  await page.getByLabel("WYSIWYG editing").click();
+  await page.getByRole("button", { name: "Tablet viewport" }).click();
+  await expect(page.getByText("768px", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Mobile viewport" }).click();
+  await expect(page.getByText("390px", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Zoom out" }).click();
+  await expect(page.getByText("75%", { exact: true })).toBeVisible();
+  await page.getByRole("treeitem", { name: /h1 · Fern Coffee/ }).click();
+  await page.getByLabel("Font size").fill("24px");
+  await page.getByLabel("Font size").press("Tab");
+  await expect
+    .poll(async () =>
+      page
+        .frameLocator("iframe.gjs-frame")
+        .getByRole("heading", { name: "Fern Coffee" })
+        .evaluate((element) => getComputedStyle(element).fontSize),
+    )
+    .toBe("24px");
+  await page.getByLabel("WYSIWYG editing").click();
 
   const chatInput = page.getByPlaceholder("Describe a change or ask a question…");
   await chatInput.fill("Change the heading");
