@@ -2,6 +2,7 @@ import { create } from "zustand";
 import * as api from "./api";
 import {
   compileDocument,
+  findNode,
   parseEditorDocument,
   type EditorDocumentV1,
 } from "./editor/document";
@@ -24,6 +25,7 @@ interface State {
   layoutDnaGuidance: string;
 
   editing: boolean;
+  selectedNodeId: string | null;
 
   code: string | null;
   editorDocument: EditorDocumentV1 | null;
@@ -64,6 +66,7 @@ interface State {
 
   loadOptions: () => Promise<void>;
   set: <K extends keyof State>(key: K, value: State[K]) => void;
+  selectNode: (nodeId: string | null) => void;
   runGenerate: (prompt: string) => Promise<void>;
   runConstraints: () => Promise<void>;
   refreshSections: () => Promise<void>;
@@ -144,6 +147,13 @@ function materializeDocument(
   return { editorDocument, code: compileDocument(editorDocument) };
 }
 
+function retainedNodeId(
+  document: EditorDocumentV1,
+  nodeId: string | null,
+): string | null {
+  return nodeId && findNode(document, nodeId) ? nodeId : null;
+}
+
 export const useStore = create<State>((set, get) => ({
   options: null,
   optionsError: null,
@@ -161,6 +171,7 @@ export const useStore = create<State>((set, get) => ({
   layoutDnaGuidance: "",
 
   editing: false,
+  selectedNodeId: null,
 
   code: null,
   editorDocument: null,
@@ -200,6 +211,7 @@ export const useStore = create<State>((set, get) => ({
   redoStack: [],
 
   set: (key, value) => set({ [key]: value } as Partial<State>),
+  selectNode: (nodeId) => set({ selectedNodeId: nodeId }),
 
   loadOptions: async () => {
     set({ optionsError: null });
@@ -426,6 +438,7 @@ export const useStore = create<State>((set, get) => ({
         activePageId: page.id,
         activePageVersion: page.version,
         ...materialized,
+        selectedNodeId: null,
         undoStack: [],
         redoStack: [],
         chatMessages: [],
@@ -564,6 +577,7 @@ export const useStore = create<State>((set, get) => ({
       const materialized = materializeDocument(page.html, page.document);
       set({
         ...materialized,
+        selectedNodeId: null,
         activePageVersion: page.version,
         undoStack: previous
           ? [...get().undoStack.slice(-49), previous]
@@ -667,6 +681,7 @@ export const useStore = create<State>((set, get) => ({
         ...(conversation.current_code
           ? materializeDocument(conversation.current_code, conversation.document)
           : { code: null, editorDocument: null }),
+        selectedNodeId: null,
         undoStack: [],
         redoStack: [],
       });
@@ -678,7 +693,13 @@ export const useStore = create<State>((set, get) => ({
   clearChat: () => set({ chatMessages: [], threadId: newThreadId() }),
 
   undo: () => {
-    const { undoStack, editorDocument, activePageId, saveState } = get();
+    const {
+      undoStack,
+      editorDocument,
+      selectedNodeId,
+      activePageId,
+      saveState,
+    } = get();
     if (undoStack.length === 0) return;
     const previousDocument = undoStack[undoStack.length - 1];
     const newUndo = undoStack.slice(0, -1);
@@ -689,6 +710,7 @@ export const useStore = create<State>((set, get) => ({
         : get().redoStack,
       editorDocument: previousDocument,
       code: compileDocument(previousDocument),
+      selectedNodeId: retainedNodeId(previousDocument, selectedNodeId),
       saveState: activePageId && saveState !== "conflict" ? "idle" : saveState,
     });
     scheduleAutosave(get);
@@ -696,7 +718,13 @@ export const useStore = create<State>((set, get) => ({
   },
 
   redo: () => {
-    const { redoStack, editorDocument, activePageId, saveState } = get();
+    const {
+      redoStack,
+      editorDocument,
+      selectedNodeId,
+      activePageId,
+      saveState,
+    } = get();
     if (redoStack.length === 0) return;
     const nextDocument = redoStack[0];
     const newRedo = redoStack.slice(1);
@@ -707,6 +735,7 @@ export const useStore = create<State>((set, get) => ({
         : get().undoStack,
       editorDocument: nextDocument,
       code: compileDocument(nextDocument),
+      selectedNodeId: retainedNodeId(nextDocument, selectedNodeId),
       saveState: activePageId && saveState !== "conflict" ? "idle" : saveState,
     });
     scheduleAutosave(get);
@@ -718,7 +747,7 @@ export const useStore = create<State>((set, get) => ({
   },
 
   setDocumentWithHistory: (nextDocument) => {
-    const { code, editorDocument, activePageId, saveState } = get();
+    const { code, editorDocument, selectedNodeId, activePageId, saveState } = get();
     const newCode = compileDocument(nextDocument);
     if (code === newCode) return;
     const nextSaveState =
@@ -730,10 +759,16 @@ export const useStore = create<State>((set, get) => ({
         redoStack: [],
         code: newCode,
         editorDocument: nextDocument,
+        selectedNodeId: retainedNodeId(nextDocument, selectedNodeId),
         saveState: nextSaveState,
       });
     } else {
-      set({ code: newCode, editorDocument: nextDocument, saveState: nextSaveState });
+      set({
+        code: newCode,
+        editorDocument: nextDocument,
+        selectedNodeId: null,
+        saveState: nextSaveState,
+      });
     }
     scheduleAutosave(get);
     scheduleDraftSave(get);

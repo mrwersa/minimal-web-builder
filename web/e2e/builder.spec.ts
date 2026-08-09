@@ -108,6 +108,25 @@ test("generate, edit, undo, and export the page", async ({ page }) => {
   const preview = page.frameLocator('iframe[title="preview"]');
   await expect(preview.getByRole("heading", { name: "Fern Coffee", exact: true })).toBeVisible();
 
+  await page.getByLabel("WYSIWYG editing").click();
+  await page.getByRole("treeitem", { name: /h1 · Fern Coffee/ }).click();
+  await page.getByLabel("Text content").fill("Fern Studio");
+  await page.getByLabel("Text content").press("Tab");
+  await expect(page.getByRole("treeitem", { name: /h1 · Fern Studio/ })).toBeVisible();
+  await page.getByLabel("WYSIWYG editing").click();
+  await expect(page.locator('iframe[title="preview"]')).toHaveAttribute(
+    "srcdoc",
+    /Fern Studio/,
+  );
+  await expect(
+    page.frameLocator('iframe[title="preview"]').getByRole("heading", {
+      name: "Fern Studio",
+      exact: true,
+    }),
+  ).toBeVisible();
+  await page.getByTitle("Undo (Ctrl+Z)").click();
+  await expect(preview.getByRole("heading", { name: "Fern Coffee", exact: true })).toBeVisible();
+
   const chatInput = page.getByPlaceholder("Describe a change or ask a question…");
   await chatInput.fill("Change the heading");
   await chatInput.press("Enter");
