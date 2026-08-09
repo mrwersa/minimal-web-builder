@@ -36,6 +36,7 @@ class AppConfig:
     generation_max_concurrency: int = 4
     generation_max_attempts: int = 3
     generation_retry_backoff_seconds: float = 0.5
+    generation_total_timeout_seconds: int = 300
 
 
 def _float_env(name: str, default: float) -> float:
@@ -109,8 +110,13 @@ def load_config(dotenv_path: str | os.PathLike | None = None) -> AppConfig:
         ),
         generation_timeout_seconds=max(1, _int_env("GENERATION_TIMEOUT_SECONDS", 120)),
         generation_max_concurrency=max(1, _int_env("GENERATION_MAX_CONCURRENCY", 4)),
-        generation_max_attempts=max(1, _int_env("GENERATION_MAX_ATTEMPTS", 3)),
+        # Clamped at both ends: a mistyped attempt count would otherwise let one
+        # request occupy a worker thread and a concurrency slot for many minutes.
+        generation_max_attempts=min(10, max(1, _int_env("GENERATION_MAX_ATTEMPTS", 3))),
         generation_retry_backoff_seconds=max(
             0.0, _float_env("GENERATION_RETRY_BACKOFF_SECONDS", 0.5)
+        ),
+        generation_total_timeout_seconds=max(
+            1, _int_env("GENERATION_TOTAL_TIMEOUT_SECONDS", 300)
         ),
     )

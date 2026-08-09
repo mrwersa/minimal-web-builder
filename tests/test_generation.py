@@ -1,10 +1,15 @@
 import json
+import urllib.error
 from types import SimpleNamespace
+
+import pytest
 
 from src.generation import (
     BASE_PROMPT,
     DEFAULT_GENERATION_TIMEOUT_SECONDS,
+    MAX_RETRY_BACKOFF_SECONDS,
     ProviderError,
+    _backoff_delay,
     build_generation_prompt,
     build_section_regeneration_prompt,
     call_gemini,
@@ -618,7 +623,9 @@ def test_retry_backoff_grows_exponentially(monkeypatch) -> None:
     fake_urlopen, _state = _flaky_urlopen(failures=99)
     monkeypatch.setattr("src.generation.urllib.request.urlopen", fake_urlopen)
     slept: list[float] = []
-    monkeypatch.setattr("src.generation.time.sleep", slept.append)
+    monkeypatch.setattr("src.generation._sleep", slept.append)
+    # Pin the jitter to its upper bound so the schedule is exact here.
+    monkeypatch.setattr("src.generation._jitter", lambda _low, high: high)
 
     _openrouter_call(max_attempts=4, retry_backoff_seconds=0.5)
 
@@ -638,7 +645,7 @@ def test_each_attempt_records_its_own_event(tmp_path, monkeypatch) -> None:
         json.loads(line) for line in analytics.read_text(encoding="utf-8").splitlines()
     ]
     assert [event["event"] for event in events] == [
-        "generation.error",
+        "generation.retry",
         "generation.success",
     ]
     assert [event["attempt"] for event in events] == [1, 2]
@@ -657,3 +664,107 @@ def test_status_codes_are_word_bounded_when_classifying() -> None:
     """A number that merely contains 401 must not cost a transient error its retries."""
     assert ProviderError("HTTP 500 Server Error after 4013ms").retryable is True
     assert ProviderError("upstream returned 5031 bytes").retryable is True
+
+
+def _raising_urlopen(status_code: int):
+    state = {"calls": 0}
+
+    def fake_urlopen(request, timeout=None):
+        state["calls"] += 1
+        raise urllib.error.HTTPError(
+            "https://openrouter.ai", status_code, "Nope", {}, None
+        )
+
+    return fake_urlopen, state
+
+
+@pytest.mark.parametrize("code", [400, 401, 402, 403, 404, 422])
+def test_permanent_http_status_codes_are_not_retried(monkeypatch, code: int) -> None:
+    """402/400/404 cannot succeed on a retry; the status beats the message text."""
+    fake_urlopen, state = _raising_urlopen(code)
+    monkeypatch.setattr("src.generation.urllib.request.urlopen", fake_urlopen)
+
+    out = _openrouter_call(max_attempts=3)
+
+    assert out.startswith("API error:")
+    assert state["calls"] == 1
+
+
+@pytest.mark.parametrize("code", [408, 429, 500, 502, 503])
+def test_retryable_http_status_codes_are_retried(monkeypatch, code: int) -> None:
+    fake_urlopen, state = _raising_urlopen(code)
+    monkeypatch.setattr("src.generation.urllib.request.urlopen", fake_urlopen)
+
+    _openrouter_call(max_attempts=3)
+
+    assert state["calls"] == 3
+
+
+def test_blocked_gemini_candidates_are_not_retried() -> None:
+    """A blocked prompt is blocked every time; retrying only re-bills tokens."""
+    error = (
+        "Invalid operation: The `response.parts` quick accessor requires the "
+        "response to contain a valid `Part`, but none were returned. The "
+        "candidate's finish_reason is 4."
+    )
+    model = _FakeModel(error=error)
+
+    out = call_gemini(
+        model,
+        _FakeGenai(),
+        [{"role": "user", "content": "hi"}],
+        temperature=0.2,
+        max_output_tokens=100,
+        max_attempts=5,
+        retry_backoff_seconds=0,
+    )
+
+    assert out.startswith("API error:")
+    assert ProviderError(error).retryable is False
+
+
+def test_retries_stop_at_the_total_deadline(monkeypatch) -> None:
+    """A per-attempt timeout must not multiply through the attempt count."""
+    fake_urlopen, state = _flaky_urlopen(failures=99)
+    monkeypatch.setattr("src.generation.urllib.request.urlopen", fake_urlopen)
+    monkeypatch.setattr("src.generation._sleep", lambda _seconds: None)
+    clock = {"now": 0.0}
+    # Every attempt burns 100s of the 120s budget, so only one retry fits.
+    monkeypatch.setattr(
+        "src.generation.time.monotonic",
+        lambda: clock.__setitem__("now", clock["now"] + 100.0) or clock["now"],
+    )
+
+    out = _openrouter_call(max_attempts=5, total_timeout_seconds=120)
+
+    assert out.startswith("API error:")
+    assert state["calls"] < 5
+
+
+def test_backoff_is_capped(monkeypatch) -> None:
+    fake_urlopen, _state = _flaky_urlopen(failures=99)
+    monkeypatch.setattr("src.generation.urllib.request.urlopen", fake_urlopen)
+    slept: list[float] = []
+    monkeypatch.setattr("src.generation._sleep", slept.append)
+    monkeypatch.setattr("src.generation._jitter", lambda _low, high: high)
+
+    _openrouter_call(
+        max_attempts=10, retry_backoff_seconds=10, total_timeout_seconds=10**6
+    )
+
+    assert max(slept) == MAX_RETRY_BACKOFF_SECONDS
+    assert all(delay <= MAX_RETRY_BACKOFF_SECONDS for delay in slept)
+
+
+def test_backoff_applies_jitter(monkeypatch) -> None:
+    """Without jitter every queued generation retries in lockstep."""
+    captured: list[tuple[float, float]] = []
+    monkeypatch.setattr(
+        "src.generation._jitter",
+        lambda low, high: captured.append((low, high)) or high,
+    )
+
+    delay = _backoff_delay(4.0, attempt=1)
+
+    assert captured == [(0, 2.0)]
+    assert delay == 4.0

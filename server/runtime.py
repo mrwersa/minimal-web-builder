@@ -67,6 +67,7 @@ def generate(
         timeout_seconds=client.config.generation_timeout_seconds,
         max_attempts=client.config.generation_max_attempts,
         retry_backoff_seconds=client.config.generation_retry_backoff_seconds,
+        total_timeout_seconds=client.config.generation_total_timeout_seconds,
     )
 
 
@@ -102,4 +103,5 @@ def regenerate_section(
         timeout_seconds=client.config.generation_timeout_seconds,
         max_attempts=client.config.generation_max_attempts,
         retry_backoff_seconds=client.config.generation_retry_backoff_seconds,
+        total_timeout_seconds=client.config.generation_total_timeout_seconds,
     )
