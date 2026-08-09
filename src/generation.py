@@ -20,7 +20,7 @@ from src.theme import (
 
 _LANGUAGE_FENCE_RE = re.compile(r"^[A-Za-z][A-Za-z0-9+#.-]*$")
 
-_OPENROUTER_TIMEOUT_SECONDS = 120
+DEFAULT_GENERATION_TIMEOUT_SECONDS = 120
 
 BASE_PROMPT = (
     "You are an expert web app developer and UI designer specializing in minimalist, clean designs.\n"
@@ -198,6 +198,7 @@ def _generate_content_openrouter(
     base_url: str = DEFAULT_OPENROUTER_BASE_URL,
     analytics_file: str | None = None,
     event_meta: dict[str, str | bool | None] | None = None,
+    timeout_seconds: int = DEFAULT_GENERATION_TIMEOUT_SECONDS,
 ) -> str:
     """Generate via OpenRouter's OpenAI-compatible chat completions endpoint."""
     meta = dict(event_meta or {})
@@ -218,9 +219,7 @@ def _generate_content_openrouter(
         method="POST",
     )
     try:
-        with urllib.request.urlopen(
-            request, timeout=_OPENROUTER_TIMEOUT_SECONDS
-        ) as response:
+        with urllib.request.urlopen(request, timeout=timeout_seconds) as response:
             body = json.loads(response.read().decode("utf-8"))
         text = body["choices"][0]["message"]["content"]
     except Exception as exc:  # noqa: BLE001 - surface any provider error as a friendly message
@@ -258,6 +257,7 @@ def _generate(
     base_url: str,
     analytics_file: str | None,
     event_meta: dict[str, str | bool | None] | None,
+    timeout_seconds: int = DEFAULT_GENERATION_TIMEOUT_SECONDS,
 ) -> str:
     if provider == OPENROUTER_PROVIDER:
         return _generate_content_openrouter(
@@ -269,6 +269,7 @@ def _generate(
             base_url=base_url,
             analytics_file=analytics_file,
             event_meta=event_meta,
+            timeout_seconds=timeout_seconds,
         )
     return _generate_content(
         model,
@@ -296,6 +297,7 @@ def call_gemini(
     provider: str = "gemini",
     api_key: str = "",
     base_url: str = DEFAULT_OPENROUTER_BASE_URL,
+    timeout_seconds: int = DEFAULT_GENERATION_TIMEOUT_SECONDS,
 ) -> str:
     prompt = build_generation_prompt(
         messages,
@@ -314,6 +316,7 @@ def call_gemini(
         api_key=api_key,
         base_url=base_url,
         analytics_file=analytics_file,
+        timeout_seconds=timeout_seconds,
         event_meta={
             "tone_key": tone_key,
             "complexity_key": complexity_key,
@@ -341,6 +344,7 @@ def call_gemini_for_section(
     provider: str = "gemini",
     api_key: str = "",
     base_url: str = DEFAULT_OPENROUTER_BASE_URL,
+    timeout_seconds: int = DEFAULT_GENERATION_TIMEOUT_SECONDS,
 ) -> str:
     prompt = build_section_regeneration_prompt(
         current_code,
@@ -362,6 +366,7 @@ def call_gemini_for_section(
         api_key=api_key,
         base_url=base_url,
         analytics_file=analytics_file,
+        timeout_seconds=timeout_seconds,
         event_meta={
             "tone_key": tone_key,
             "complexity_key": complexity_key,

@@ -94,17 +94,22 @@ Exit metrics:
 - ✅ A typical direct edit takes fewer than three interactions.
 - ✅ Responsive problems can be fixed without regenerating the page.
 
-## Phase 3: Reliable AI generation ⬜
+## Phase 3: Reliable AI generation 🔄
 
 Goal: generation is observable, cancellable, measurable, and structurally safe.
 
-- Replace full-document rewrites with typed insert/update/move/delete patches.
-- Stream job progress and support cancellation, retry, and recovery after navigation.
-- Add durable workers, provider timeouts, fallback policy, and concurrency limits.
-- Add visual-quality, responsiveness, accessibility, and instruction-following fixtures.
-- Add screenshot and visual-regression checks for representative pages.
-- Track latency, token usage, cost, acceptance, undo-after-generation, and failures.
-- Add structured content and asset inputs instead of relying only on prompt inference.
+- ⬜ Replace full-document rewrites with typed insert/update/move/delete patches.
+- ⬜ Stream job progress and support cancellation, retry, and recovery after navigation.
+- 🔄 Add durable workers, provider timeouts, fallback policy, and concurrency limits.
+  Provider timeouts and concurrency limits are configurable and enforced; durable
+  workers and fallback policy remain.
+- ⬜ Add visual-quality, responsiveness, accessibility, and instruction-following fixtures.
+- ⬜ Add screenshot and visual-regression checks for representative pages.
+- 🔄 Track latency, token usage, cost, acceptance, undo-after-generation, and failures.
+  Every job records duration, outcome, and a failure cause, aggregated into
+  success-rate and P50/P95 summaries per operation. Token usage, cost, and
+  client-side acceptance/undo signals remain.
+- ⬜ Add structured content and asset inputs instead of relying only on prompt inference.
 
 Exit metrics:
 

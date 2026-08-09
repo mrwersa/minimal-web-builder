@@ -152,3 +152,33 @@ def test_load_config_reads_values_from_dotenv_path(tmp_path) -> None:
     assert cfg.provider == OPENROUTER_PROVIDER
     assert cfg.openrouter_api_key == "or-file"
     assert cfg.temperature == 0.5
+
+
+def test_load_config_reads_generation_limits(monkeypatch) -> None:
+    monkeypatch.setenv("GENERATION_TIMEOUT_SECONDS", "45")
+    monkeypatch.setenv("GENERATION_MAX_CONCURRENCY", "2")
+
+    cfg = load_config(dotenv_path=_NO_DOTENV)
+
+    assert cfg.generation_timeout_seconds == 45
+    assert cfg.generation_max_concurrency == 2
+
+
+def test_load_config_generation_limit_defaults(monkeypatch) -> None:
+    monkeypatch.delenv("GENERATION_TIMEOUT_SECONDS", raising=False)
+    monkeypatch.delenv("GENERATION_MAX_CONCURRENCY", raising=False)
+
+    cfg = load_config(dotenv_path=_NO_DOTENV)
+
+    assert cfg.generation_timeout_seconds == 120
+    assert cfg.generation_max_concurrency == 4
+
+
+def test_load_config_clamps_nonpositive_generation_limits(monkeypatch) -> None:
+    monkeypatch.setenv("GENERATION_TIMEOUT_SECONDS", "0")
+    monkeypatch.setenv("GENERATION_MAX_CONCURRENCY", "-3")
+
+    cfg = load_config(dotenv_path=_NO_DOTENV)
+
+    assert cfg.generation_timeout_seconds == 1
+    assert cfg.generation_max_concurrency == 1

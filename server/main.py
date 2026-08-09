@@ -27,7 +27,7 @@ from server.assets import (
 from server.auth import AuthService
 from server.auth_routes import Authenticated
 from server.auth_routes import router as auth_router
-from server.concurrency import offload
+from server.concurrency import GenerationLimiter, offload
 from server.content import DocumentValidationError, validate_document
 from server.control_routes import router as control_router
 from server.controls import IdempotencyConflictError, RequestControlService
@@ -88,6 +88,9 @@ async def lifespan(app: FastAPI) -> typing.AsyncIterator[None]:
     app.state.assets = ReusableAssetService(app.state.database.sessions)
     app.state.orchestrator = GenerationOrchestrator(app.state.database.sessions)
     app.state.controls = RequestControlService(app.state.database.sessions)
+    app.state.generation_limiter = GenerationLimiter(
+        app.state.client.config.generation_max_concurrency
+    )
     app.state.controls.recover_stale_records()
     app.state.orchestrator.recover_interrupted_jobs()
     try:
@@ -178,6 +181,10 @@ def _profiles():
 
 def _orchestrator() -> GenerationOrchestrator:
     return app.state.orchestrator
+
+
+def _generation_limiter() -> GenerationLimiter:
+    return app.state.generation_limiter
 
 
 def _sanitize_output(raw: str) -> tuple[str, list[str], list[str]]:
@@ -340,14 +347,16 @@ async def generate_page(
             },
         }
 
-    result = await run_idempotent(
-        request,
-        principal,
-        "generation.generate",
-        req.model_dump(),
-        lambda: _orchestrator().execute(
-            principal.id, "generate", req.model_dump(), perform
-        ),
+    result = await _generation_limiter().run(
+        lambda: run_idempotent(
+            request,
+            principal,
+            "generation.generate",
+            req.model_dump(),
+            lambda: _orchestrator().execute(
+                principal.id, "generate", req.model_dump(), perform
+            ),
+        )
     )
     return JSONResponse(result)
 
@@ -401,20 +410,22 @@ async def chat(
             f"{settings.get('extra_guidance', '')}\n{req.layout_dna_guidance}".strip()
         )
 
-    result = await run_idempotent(
-        request,
-        principal,
-        "generation.chat",
-        req.model_dump(),
-        lambda: _orchestrator().chat(
-            principal.id,
-            req.thread_id,
-            validated,
-            req.current_code,
-            settings,
-            _client(),
-            req.target_node_id,
-        ),
+    result = await _generation_limiter().run(
+        lambda: run_idempotent(
+            request,
+            principal,
+            "generation.chat",
+            req.model_dump(),
+            lambda: _orchestrator().chat(
+                principal.id,
+                req.thread_id,
+                validated,
+                req.current_code,
+                settings,
+                _client(),
+                req.target_node_id,
+            ),
+        )
     )
     return JSONResponse(result)
 
@@ -432,6 +443,11 @@ async def conversation_get(thread_id: str, principal: Authenticated) -> dict[str
 @app.get("/api/generation-jobs")
 async def generation_jobs(principal: Authenticated) -> dict[str, Any]:
     return {"jobs": await offload(_orchestrator().list_jobs, principal.id)}
+
+
+@app.get("/api/generation-jobs/stats")
+async def generation_job_stats(principal: Authenticated) -> dict[str, Any]:
+    return await offload(_orchestrator().job_stats, principal.id)
 
 
 class SectionsRequest(BaseModel):
@@ -521,14 +537,16 @@ async def generate_section(
             "notes": notes,
         }
 
-    result = await run_idempotent(
-        request,
-        principal,
-        "generation.generate_section",
-        req.model_dump(),
-        lambda: _orchestrator().execute(
-            principal.id, "generate_section", req.model_dump(), perform
-        ),
+    result = await _generation_limiter().run(
+        lambda: run_idempotent(
+            request,
+            principal,
+            "generation.generate_section",
+            req.model_dump(),
+            lambda: _orchestrator().execute(
+                principal.id, "generate_section", req.model_dump(), perform
+            ),
+        )
     )
     return JSONResponse(result)
 

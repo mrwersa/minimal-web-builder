@@ -186,6 +186,12 @@ class GenerationJobRecord(Base):
     request: Mapped[dict] = mapped_column(JSON)
     result: Mapped[dict | None] = mapped_column(JSON)
     error: Mapped[str | None] = mapped_column(Text)
+    # Classifies *why* a job failed so the failure rate can be split by cause
+    # rather than only counted. See server.orchestrator.classify_failure.
+    failure_kind: Mapped[str | None] = mapped_column(String(32), index=True)
+    duration_ms: Mapped[int | None] = mapped_column(Integer)
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    metrics: Mapped[dict | None] = mapped_column(JSON)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=utcnow
     )

@@ -45,6 +45,8 @@ A sleek, minimalist web application builder powered by AI (Gemini / OpenRouter).
 - Element-scoped AI editing that uses stable node IDs and applies only the generated target subtree
 - Keyboard-navigable layers, document shortcuts, and a searchable accessible command palette
 - Explicit, undoable advanced editors for head markup, custom CSS, and sandboxed body scripts
+- Durable per-generation latency, outcome, and failure-cause metrics with a queryable success-rate and P50/P95 summary
+- Configurable provider timeouts and a bounded generation concurrency limit
 
 
 ## Setup
@@ -77,7 +79,9 @@ A sleek, minimalist web application builder powered by AI (Gemini / OpenRouter).
    HTTPS production deployments; customize `SESSION_HOURS` and `CORS_ORIGINS`
    when the frontend and API use different origins. The authentication and
    generation limits can be tuned with `AUTH_RATE_LIMIT_PER_MINUTE` and
-   `GENERATION_RATE_LIMIT_PER_MINUTE`.
+   `GENERATION_RATE_LIMIT_PER_MINUTE`. `GENERATION_TIMEOUT_SECONDS` (default
+   120) bounds a single provider call and `GENERATION_MAX_CONCURRENCY`
+   (default 4) bounds how many generations run at once.
 
 For a single-process production build, run `cd web && npm run build` then
 `uvicorn server.main:app --port 8000` and open http://localhost:8000/.
@@ -179,7 +183,9 @@ Current priorities:
 - Phase 0: complete — product truth, reversible document changes, editor reliability, and full-stack CI
 - Phase 1: complete — private projects, reusable assets, durable conversations/jobs, revision branching, and request hardening
 - Phase 2: complete — a durable versioned document model with stable canvas node IDs and deterministic HTML compilation, plus responsive controls, global design tokens, element-scoped AI, a command palette, and advanced code escape hatches
-- Phase 3: next — cancellable, measurable, patch-based AI generation
+- Phase 3: in progress — cancellable, measurable, patch-based AI generation; generation
+  jobs now record durable latency and failure-cause metrics behind enforced provider
+  timeouts and concurrency limits
 - Phase 4: multi-page publishing, assets, forms, domains, and rollback
 - Phase 5: collaboration and scale after the core single-user workflow has traction
 
