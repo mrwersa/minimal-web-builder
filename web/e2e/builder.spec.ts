@@ -124,7 +124,16 @@ test("generate, edit, undo, and export the page", async ({ page }) => {
   const preview = page.frameLocator('iframe[title="preview"]');
   await expect(preview.getByRole("heading", { name: "Fern Coffee", exact: true })).toBeVisible();
 
-  await page.getByLabel("WYSIWYG editing").click();
+  await page.keyboard.press("Control+k");
+  await expect(page.getByRole("dialog", { name: "Command palette" })).toBeVisible();
+  await page.getByLabel("Search commands").fill("Show code");
+  await page.getByLabel("Search commands").press("Enter");
+  await expect(page.getByRole("button", { name: "Prepare export" })).toBeVisible();
+  await page.keyboard.press("Control+1");
+  await expect(preview.getByRole("heading", { name: "Fern Coffee", exact: true })).toBeVisible();
+
+  await page.keyboard.press("Control+.");
+  await expect(page.getByLabel("WYSIWYG editing")).toBeChecked();
   await page.getByRole("treeitem", { name: /h1 · Fern Coffee/ }).click();
   await page.getByLabel("Text content").fill("Fern Studio");
   await page.getByLabel("Text content").press("Tab");

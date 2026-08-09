@@ -1,6 +1,6 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Toaster, toast } from "sonner";
-import { Eye, Code2, AlertCircle, Info, Sparkles, ArrowRight, Undo2, Redo2, LogOut } from "lucide-react";
+import { Eye, Code2, AlertCircle, Info, Sparkles, ArrowRight, Undo2, Redo2, LogOut, Command as CommandIcon } from "lucide-react";
 import Preview from "./components/Preview";
 import CodePanel from "./components/CodePanel";
 import Sidebar from "./components/Sidebar";
@@ -13,6 +13,12 @@ import { Spinner } from "./components/ui/Spinner";
 import { Badge } from "./components/ui/Badge";
 import AuthScreen from "./components/AuthScreen";
 import { useAuthStore } from "./authStore";
+import CommandPalette from "./components/CommandPalette";
+import {
+  isEditableTarget,
+  keyboardShortcut,
+  type BuilderCommand,
+} from "./commands";
 
 type Tab = "preview" | "code";
 
@@ -54,10 +60,77 @@ function BuilderApp() {
   const redoStack = useStore((s) => s.redoStack);
   const undo = useStore((s) => s.undo);
   const redo = useStore((s) => s.redo);
+  const editing = useStore((s) => s.editing);
+  const setStore = useStore((s) => s.set);
   const [tab, setTab] = useState<Tab>("preview");
   const [prompt, setPrompt] = useState("");
   const [showChat, setShowChat] = useState(true);
+  const [paletteOpen, setPaletteOpen] = useState(false);
   const wasBusy = useRef(false);
+
+  const commands = useMemo<BuilderCommand[]>(
+    () => [
+      {
+        id: "open-command-palette",
+        label: "Open command palette",
+        description: "Search every builder command",
+        shortcut: "mod+k",
+        keywords: ["search", "actions"],
+        run: () => setPaletteOpen(true),
+      },
+      {
+        id: "show-preview",
+        label: "Show preview",
+        description: "Switch to the rendered page",
+        shortcut: "mod+1",
+        run: () => setTab("preview"),
+      },
+      {
+        id: "show-code",
+        label: "Show code",
+        description: "Switch to portable HTML export",
+        shortcut: "mod+2",
+        disabled: !code,
+        run: () => setTab("code"),
+      },
+      {
+        id: "toggle-visual-editor",
+        label: editing ? "Close visual editor" : "Open visual editor",
+        description: "Toggle direct canvas editing",
+        shortcut: "mod+.",
+        disabled: !code || busy,
+        keywords: ["wysiwyg", "canvas"],
+        run: () => {
+          setTab("preview");
+          setStore("editing", !editing);
+        },
+      },
+      {
+        id: "toggle-chat",
+        label: showChat ? "Hide chat" : "Show chat",
+        description: "Toggle the AI conversation panel",
+        shortcut: "mod+j",
+        run: () => setShowChat((visible) => !visible),
+      },
+      {
+        id: "undo",
+        label: "Undo",
+        description: "Revert the last document change",
+        shortcut: "mod+z",
+        disabled: undoStack.length === 0,
+        run: undo,
+      },
+      {
+        id: "redo",
+        label: "Redo",
+        description: "Restore the last reverted change",
+        shortcut: "mod+shift+z",
+        disabled: redoStack.length === 0,
+        run: redo,
+      },
+    ],
+    [busy, code, editing, redo, redoStack.length, setStore, showChat, undo, undoStack.length],
+  );
 
   useEffect(() => { loadOptions(); }, [loadOptions]);
   useEffect(() => { void restoreConversation(); }, [restoreConversation]);
@@ -73,18 +146,16 @@ function BuilderApp() {
 
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
-      if ((e.metaKey || e.ctrlKey) && e.key === "z") {
-        e.preventDefault();
-        if (e.shiftKey) {
-          redo();
-        } else {
-          undo();
-        }
-      }
+      const shortcut = keyboardShortcut(e);
+      if (!shortcut || (isEditableTarget(e.target) && shortcut !== "mod+k")) return;
+      const command = commands.find((candidate) => candidate.shortcut === shortcut);
+      if (!command || command.disabled) return;
+      e.preventDefault();
+      command.run();
     }
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [undo, redo]);
+  }, [commands]);
 
   function submit() {
     const p = prompt.trim();
@@ -107,6 +178,14 @@ function BuilderApp() {
             <ToolbarTab icon={<Code2 className="h-4 w-4" />} label="Code" active={tab === "code"} onClick={() => setTab("code")} />
           </div>
           <div className="flex items-center gap-2">
+            <button
+              aria-label="Open command palette"
+              title="Commands (Ctrl+K)"
+              onClick={() => setPaletteOpen(true)}
+              className="rounded-lg p-1.5 text-muted2 transition-colors hover:bg-bg hover:text-text2"
+            >
+              <CommandIcon className="h-4 w-4" />
+            </button>
             <button
               onClick={undo}
               disabled={undoStack.length === 0}
@@ -184,6 +263,13 @@ function BuilderApp() {
           <div className="h-72 shrink-0 border-t border-border2">
             <ChatPanel />
           </div>
+        )}
+
+        {paletteOpen && (
+          <CommandPalette
+            commands={commands.filter((command) => command.id !== "open-command-palette")}
+            onClose={() => setPaletteOpen(false)}
+          />
         )}
 
         <Toaster position="bottom-right" richColors closeButton />
