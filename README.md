@@ -178,8 +178,8 @@ Current priorities:
 
 - Phase 0: complete — product truth, reversible document changes, editor reliability, and full-stack CI
 - Phase 1: complete — private projects, reusable assets, durable conversations/jobs, revision branching, and request hardening
-- Phase 2: in progress — a durable versioned document model now provides stable canvas node IDs, deterministic HTML compilation, and document-native undo/redo
-- Phase 3: cancellable, measurable, patch-based AI generation
+- Phase 2: complete — a durable versioned document model with stable canvas node IDs and deterministic HTML compilation, plus responsive controls, global design tokens, element-scoped AI, a command palette, and advanced code escape hatches
+- Phase 3: next — cancellable, measurable, patch-based AI generation
 - Phase 4: multi-page publishing, assets, forms, domains, and rollback
 - Phase 5: collaboration and scale after the core single-user workflow has traction
 

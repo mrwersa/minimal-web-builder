@@ -17,3 +17,12 @@ web/dist/
 web/tsconfig.tsbuildinfo
 
 web/.vite/
+
+# Machine-local Claude Code state; shared project guidance remains trackable.
+/.claude/settings.local.json
+
+# This repository's Node project lives in /web. Keep accidental root-level
+# CLI installs (Claude Code is installed globally) out of version control.
+/node_modules/
+/package.json
+/package-lock.json
