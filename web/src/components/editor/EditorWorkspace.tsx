@@ -13,6 +13,7 @@ import { findNode, type EditorDocumentV1 } from "../../editor/document";
 import { elementLabel, elementPath } from "../../editor/operations";
 import { useStore } from "../../store";
 import GrapeJSEditor from "../GrapeJSEditor";
+import DesignTokensPanel from "./DesignTokensPanel";
 import EditorInspector from "./EditorInspector";
 import LayerTree from "./LayerTree";
 
@@ -119,6 +120,7 @@ export default function EditorWorkspace({ document }: { document: EditorDocument
       </section>
 
       <aside className="flex w-72 shrink-0 flex-col border-l border-border2 bg-surface">
+        <DesignTokensPanel document={document} onChange={setDocumentWithHistory} />
         <section className="flex max-h-[45%] min-h-32 flex-col border-b border-border2">
           <h2 className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-text2">
             <Layers3 className="h-3.5 w-3.5 text-muted2" /> Layers

@@ -5,6 +5,7 @@ export type ResponsiveStyleMap = Record<
   string,
   Partial<Record<EditorBreakpoint, Record<string, string>>>
 >;
+export type DesignTokenMap = Record<string, string>;
 
 export interface ElementNode {
   type: "element";
@@ -36,6 +37,7 @@ export interface EditorDocumentV1 {
   css: string;
   bodyScripts: string[];
   responsiveStyles?: ResponsiveStyleMap;
+  designTokens?: DesignTokenMap;
 }
 
 const VOID_ELEMENTS = new Set([
@@ -141,15 +143,37 @@ function compileNode(
     .join("")}</${node.tag}>`;
 }
 
+function extractDesignTokens(css: string): {
+  css: string;
+  designTokens: DesignTokenMap;
+} {
+  const designTokens: DesignTokenMap = {};
+  const withoutTokens = css.replace(
+    /:root\s*\{([^{}]*)\}/gi,
+    (block, declarations: string) => {
+      const remaining = declarations.replace(
+        /--mwb-([a-z][a-z0-9-]{0,79})\s*:\s*([^;{}]+);?/gi,
+        (_declaration, name: string, value: string) => {
+          designTokens[name.toLowerCase()] = value.trim();
+          return "";
+        },
+      );
+      return remaining.trim() ? block.replace(declarations, remaining) : "";
+    },
+  );
+  return { css: withoutTokens.trim(), designTokens };
+}
+
 export function parseEditorDocument(html: string): EditorDocumentV1 {
   const parser = new DOMParser();
   const parsed = parser.parseFromString(html, "text/html");
   const head = parsed.head.cloneNode(true) as HTMLHeadElement;
   const body = parsed.body.cloneNode(true) as HTMLBodyElement;
-  const css = Array.from(parsed.querySelectorAll("style"))
+  const compiledCss = Array.from(parsed.querySelectorAll("style"))
     .map((style) => style.textContent ?? "")
     .filter(Boolean)
     .join("\n\n");
+  const { css, designTokens } = extractDesignTokens(compiledCss);
   const bodyScripts = Array.from(body.querySelectorAll("script")).map(
     (script) => script.outerHTML,
   );
@@ -167,6 +191,7 @@ export function parseEditorDocument(html: string): EditorDocumentV1 {
     css,
     bodyScripts,
     responsiveStyles: {},
+    designTokens,
   };
 }
 
@@ -182,6 +207,14 @@ function cssDeclarations(values: Record<string, string>): string {
     .sort(([left], [right]) => left.localeCompare(right))
     .map(([property, value]) => `${property}: ${value.trim()};`)
     .join(" ");
+}
+
+export function compileDesignTokenCss(document: EditorDocumentV1): string {
+  const declarations = Object.entries(document.designTokens ?? {})
+    .filter(([, value]) => value.trim())
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([name, value]) => `--mwb-${name}: ${value.trim()};`);
+  return declarations.length > 0 ? `:root { ${declarations.join(" ")} }` : "";
 }
 
 export function compileResponsiveCss(
@@ -217,6 +250,7 @@ export function compileDocument(
   { includeEditorIds = true }: { includeEditorIds?: boolean } = {},
 ): string {
   const compiledCss = [
+    compileDesignTokenCss(document),
     document.css.trim(),
     compileResponsiveCss(document, { includeEditorIds }),
   ]

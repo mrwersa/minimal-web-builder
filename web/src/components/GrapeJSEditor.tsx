@@ -3,6 +3,7 @@ import grapesjs, { type Component, type Editor } from "grapesjs";
 import "grapesjs/dist/css/grapes.min.css";
 import {
   compileCanvas,
+  compileDesignTokenCss,
   compileDocument,
   compileResponsiveCss,
   replaceCanvas,
@@ -30,18 +31,23 @@ function findComponent(component: Component, nodeId: string): Component | null {
   return null;
 }
 
-function syncResponsiveStyles(editor: Editor, document: EditorDocumentV1): void {
+function syncManagedStyles(editor: Editor, document: EditorDocumentV1): void {
   const canvasDocument = editor.Canvas.getDocument();
   if (!canvasDocument) return;
-  let style = canvasDocument.querySelector<HTMLStyleElement>(
-    "style[data-mwb-responsive]",
-  );
-  if (!style) {
-    style = canvasDocument.createElement("style");
-    style.dataset.mwbResponsive = "true";
-    canvasDocument.head.append(style);
+  for (const [name, css] of [
+    ["tokens", compileDesignTokenCss(document)],
+    ["responsive", compileResponsiveCss(document)],
+  ]) {
+    let style = canvasDocument.querySelector<HTMLStyleElement>(
+      `style[data-mwb-${name}]`,
+    );
+    if (!style) {
+      style = canvasDocument.createElement("style");
+      style.setAttribute(`data-mwb-${name}`, "true");
+      canvasDocument.head.append(style);
+    }
+    style.textContent = css;
   }
-  style.textContent = compileResponsiveCss(document);
 }
 
 export default function GrapeJSEditor({
@@ -97,7 +103,7 @@ export default function GrapeJSEditor({
     };
     editor.on("component:selected", handleSelection);
     const handleFrameLoad = () => {
-      if (documentRef.current) syncResponsiveStyles(editor, documentRef.current);
+      if (documentRef.current) syncManagedStyles(editor, documentRef.current);
     };
     editor.on("canvas:frame:load", handleFrameLoad);
 
@@ -120,9 +126,11 @@ export default function GrapeJSEditor({
     documentRef.current = document;
     editor.DomComponents.clear();
     editor.CssComposer.clear();
-    editor.setComponents(compileCanvas(document));
     editor.setStyle(document.css);
-    syncResponsiveStyles(editor, document);
+    // Load shared CSS before components so GrapesJS can register inline styles
+    // without the subsequent stylesheet reset discarding them.
+    editor.setComponents(compileCanvas(document));
+    syncManagedStyles(editor, document);
     // GrapesJS normalizes markup while loading. Treat that normalized document as
     // the baseline so merely opening the editor does not create a revision.
     lastEmittedRef.current = compileDocument(

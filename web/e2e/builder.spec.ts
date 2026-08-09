@@ -96,6 +96,8 @@ test("generate, edit, undo, and export the page", async ({ page }) => {
     expect(request.html).toContain("Fern Coffee");
     expect(request.html).toContain("@media (max-width: 639px)");
     expect(request.html).toContain("font-size: 24px;");
+    expect(request.html).toContain("--mwb-color-primary: #c2410c;");
+    expect(request.html).toContain("color: var(--mwb-color-primary)");
     expect(request.html).toContain("mwb-node-");
     expect(request.html).not.toContain("data-mwb-id");
     await route.fulfill({
@@ -130,15 +132,28 @@ test("generate, edit, undo, and export the page", async ({ page }) => {
   await expect(preview.getByRole("heading", { name: "Fern Coffee", exact: true })).toBeVisible();
 
   await page.getByLabel("WYSIWYG editing").click();
+  await page.getByLabel("Primary color").fill("#c2410c");
+  await page.getByLabel("Primary color").press("Tab");
+  await page.getByRole("treeitem", { name: /h1 · Fern Coffee/ }).click();
+  await page
+    .getByLabel("Text color token")
+    .selectOption("var(--mwb-color-primary)");
+  await expect
+    .poll(async () =>
+      page
+        .frameLocator("iframe.gjs-frame")
+        .getByRole("heading", { name: "Fern Coffee" })
+        .evaluate((element) => getComputedStyle(element).color),
+    )
+    .toBe("rgb(194, 65, 12)");
   await page.getByRole("button", { name: "Tablet viewport" }).click();
   await expect(page.getByText("768px", { exact: true })).toBeVisible();
   await page.getByRole("button", { name: "Mobile viewport" }).click();
   await expect(page.getByText("390px", { exact: true })).toBeVisible();
   await page.getByRole("button", { name: "Zoom out" }).click();
   await expect(page.getByText("75%", { exact: true })).toBeVisible();
-  await page.getByRole("treeitem", { name: /h1 · Fern Coffee/ }).click();
-  await page.getByLabel("Font size").fill("24px");
-  await page.getByLabel("Font size").press("Tab");
+  await page.getByLabel("Font size", { exact: true }).fill("24px");
+  await page.getByLabel("Font size", { exact: true }).press("Tab");
   await expect
     .poll(async () =>
       page

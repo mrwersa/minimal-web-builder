@@ -1,4 +1,3 @@
-import { useEffect, useState } from "react";
 import type {
   EditorBreakpoint,
   EditorDocumentV1,
@@ -11,8 +10,9 @@ import {
   setElementStyle,
   setElementText,
 } from "../../editor/operations";
-import { Input } from "../ui/Input";
+import { tokenOptions } from "../../editor/tokens";
 import { Select } from "../ui/Select";
+import { CommitField, InspectorSection } from "./EditorFields";
 
 interface EditorInspectorProps {
   document: EditorDocumentV1;
@@ -21,59 +21,44 @@ interface EditorInspectorProps {
   onChange: (document: EditorDocumentV1) => void;
 }
 
-function InspectorSection({
-  title,
-  children,
-}: {
-  title: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <details open className="rounded-lg border border-border2 p-2">
-      <summary className="cursor-pointer text-[11px] font-semibold uppercase tracking-wide text-muted2">
-        {title}
-      </summary>
-      <div className="mt-2 space-y-2">{children}</div>
-    </details>
-  );
-}
-
-function CommitField({
+function TokenStyleField({
+  document,
   label,
   value,
   placeholder,
+  property,
   onCommit,
 }: {
+  document: EditorDocumentV1;
   label: string;
   value: string;
-  placeholder?: string;
+  placeholder: string;
+  property: string;
   onCommit: (value: string) => void;
 }) {
-  const [draft, setDraft] = useState(value);
-  useEffect(() => setDraft(value), [value]);
-
-  const commit = () => {
-    if (draft !== value) onCommit(draft);
-  };
-
+  const options = tokenOptions(document, property);
   return (
-    <label className="block space-y-1 text-[11px] font-medium text-muted2">
-      <span>{label}</span>
-      <Input
-        aria-label={label}
-        value={draft}
+    <div className="space-y-1">
+      <CommitField
+        label={label}
+        value={value}
         placeholder={placeholder}
-        onChange={(event) => setDraft(event.target.value)}
-        onBlur={commit}
-        onKeyDown={(event) => {
-          if (event.key === "Enter") event.currentTarget.blur();
-          if (event.key === "Escape") {
-            setDraft(value);
-            event.currentTarget.blur();
-          }
-        }}
+        onCommit={onCommit}
       />
-    </label>
+      {options.length > 0 && (
+        <label className="block">
+          <span className="sr-only">{label} token</span>
+          <Select
+            value={options.some((option) => option.value === value) ? value : ""}
+            options={[{ value: "", label: `Use ${label.toLowerCase()} token…` }, ...options]}
+            onChange={(next) => {
+              if (next) onCommit(next);
+            }}
+            className="h-7 text-xs"
+          />
+        </label>
+      )}
+    </div>
   );
 }
 
@@ -162,34 +147,39 @@ export default function EditorInspector({
       </InspectorSection>
 
       <InspectorSection title="Spacing & size">
-        {[
+        {([
           ["Padding", "padding", "16px 24px"],
           ["Margin", "margin", "0 auto"],
           ["Gap", "gap", "16px"],
           ["Width", "width", "100%"],
           ["Max width", "max-width", "1200px"],
-        ].map(([label, property, placeholder]) => (
-          <CommitField
+          ["Border radius", "border-radius", "12px"],
+        ] as const).map(([label, property, placeholder]) => (
+          <TokenStyleField
             key={property}
+            document={document}
             label={label}
             value={styleValue(property)}
             placeholder={placeholder}
+            property={property}
             onCommit={(value) => commitStyle(property, value)}
           />
         ))}
       </InspectorSection>
 
       <InspectorSection title="Typography">
-        {[
+        {([
           ["Font size", "font-size", "16px"],
           ["Font family", "font-family", "Inter, sans-serif"],
           ["Line height", "line-height", "1.5"],
-        ].map(([label, property, placeholder]) => (
-          <CommitField
+        ] as const).map(([label, property, placeholder]) => (
+          <TokenStyleField
             key={property}
+            document={document}
             label={label}
             value={styleValue(property)}
             placeholder={placeholder}
+            property={property}
             onCommit={(value) => commitStyle(property, value)}
           />
         ))}
@@ -223,16 +213,20 @@ export default function EditorInspector({
       </InspectorSection>
 
       <InspectorSection title="Color">
-        <CommitField
+        <TokenStyleField
+          document={document}
           label="Text color"
           value={styleValue("color")}
           placeholder="#111827"
+          property="color"
           onCommit={(value) => commitStyle("color", value)}
         />
-        <CommitField
+        <TokenStyleField
+          document={document}
           label="Background"
           value={styleValue("background-color")}
           placeholder="#ffffff"
+          property="background-color"
           onCommit={(value) => commitStyle("background-color", value)}
         />
       </InspectorSection>

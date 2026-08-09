@@ -43,3 +43,16 @@ def test_validates_responsive_style_references() -> None:
     document["responsiveStyles"] = {"missing": {"watch": {"display": "none"}}}
     with pytest.raises(EditorDocumentValidationError, match="existing element"):
         validate_editor_document(document)
+
+
+def test_validates_design_tokens() -> None:
+    document = editor_document()
+    document["designTokens"] = {
+        "color-primary": "#2563eb",
+        "font-body": "Inter, sans-serif",
+    }
+    assert validate_editor_document(document) is document
+
+    document["designTokens"] = {"Invalid token name": "red"}
+    with pytest.raises(EditorDocumentValidationError, match="Design tokens"):
+        validate_editor_document(document)
