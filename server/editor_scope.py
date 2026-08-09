@@ -57,7 +57,10 @@ class _EditorElementScanner(HTMLParser):
         self_closing: bool = False,
     ) -> None:
         start = self._offset()
-        if self._target_start is None and dict(attrs).get("data-mwb-id") == self._node_id:
+        if (
+            self._target_start is None
+            and dict(attrs).get("data-mwb-id") == self._node_id
+        ):
             raw = self.get_starttag_text() or f"<{tag}>"
             if self_closing or tag in _VOID_ELEMENTS:
                 end = start + len(raw)
@@ -72,9 +75,7 @@ class _EditorElementScanner(HTMLParser):
     def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
         self._start(tag, attrs)
 
-    def handle_startendtag(
-        self, tag: str, attrs: list[tuple[str, str | None]]
-    ) -> None:
+    def handle_startendtag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
         self._start(tag, attrs, self_closing=True)
 
     def handle_endtag(self, tag: str) -> None:
@@ -101,7 +102,9 @@ def find_editor_element(html: str, node_id: str) -> EditorElement | None:
     return scanner.element
 
 
-def apply_scoped_generation(current_html: str, generated_html: str, node_id: str) -> str:
+def apply_scoped_generation(
+    current_html: str, generated_html: str, node_id: str
+) -> str:
     current = find_editor_element(current_html, node_id)
     generated = find_editor_element(generated_html, node_id)
     if current is None:

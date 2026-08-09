@@ -106,11 +106,11 @@ def test_validate_passes_on_valid_html() -> None:
 def test_validate_scopes_generated_changes_to_selected_element() -> None:
     state: BuilderState = {
         "current_code": (
-            '<!doctype html><html><body><header>Keep</header>'
+            "<!doctype html><html><body><header>Keep</header>"
             '<main data-mwb-id="target">Old</main></body></html>'
         ),
         "generation_result": (
-            '<!doctype html><html><body><header>Changed</header>'
+            "<!doctype html><html><body><header>Changed</header>"
             '<main data-mwb-id="target">New</main></body></html>'
         ),
         "target_node_id": "target",
