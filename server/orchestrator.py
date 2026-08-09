@@ -136,6 +136,30 @@ class GenerationOrchestrator:
                 "current_code": record.current_code,
             }
 
+    def checkpoint_document(
+        self,
+        owner_id: str,
+        thread_id: str,
+        user_message: str,
+        assistant_message: str,
+        code: str,
+    ) -> str:
+        conversation = self._get_or_create_conversation(owner_id, _thread_id(thread_id))
+        messages = [
+            *conversation.messages,
+            {"role": "user", "content": user_message},
+            {"role": "assistant", "content": assistant_message},
+        ]
+        self._save_conversation(conversation.id, messages, code)
+        return conversation.id
+
+    def update_document(
+        self, owner_id: str, thread_id: str, code: str
+    ) -> dict[str, Any]:
+        conversation = self._get_or_create_conversation(owner_id, _thread_id(thread_id))
+        self._save_conversation(conversation.id, list(conversation.messages), code)
+        return {"thread_id": conversation.thread_id, "saved": True}
+
     def list_jobs(self, owner_id: str) -> list[dict[str, Any]]:
         with self._sessions() as session:
             records = session.scalars(

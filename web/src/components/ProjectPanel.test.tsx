@@ -48,4 +48,39 @@ describe("ProjectPanel", () => {
     );
     expect(await screen.findByText("Product Launch")).toBeInTheDocument();
   });
+
+  it("creates a named checkpoint for the active page", async () => {
+    useStore.setState({
+      activeProjectId: "project-1",
+      activePageId: "page-1",
+      activePageVersion: 2,
+      checkpointName: "Before launch",
+      saveState: "saved",
+    });
+    vi.spyOn(api, "createCheckpoint").mockResolvedValue({
+      id: "page-1",
+      project_id: "project-1",
+      name: "Home",
+      slug: "home",
+      version: 3,
+      current_revision_id: "revision-3",
+      html: "<main>saved</main>",
+      created_at: "2026-08-08T00:00:00Z",
+      updated_at: "2026-08-08T00:01:00Z",
+    });
+    vi.spyOn(api, "fetchRevisions").mockResolvedValue([]);
+    render(<ProjectPanel />);
+
+    fireEvent.click(screen.getByTitle("Save named checkpoint"));
+
+    await waitFor(() =>
+      expect(api.createCheckpoint).toHaveBeenCalledWith(
+        "page-1",
+        "Before launch",
+        2,
+      ),
+    );
+    expect(useStore.getState().activePageVersion).toBe(3);
+    expect(useStore.getState().checkpointName).toBe("");
+  });
 });

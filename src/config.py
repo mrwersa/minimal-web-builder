@@ -30,6 +30,8 @@ class AppConfig:
         "http://localhost:5173",
         "http://127.0.0.1:5173",
     )
+    auth_rate_limit_per_minute: int = 10
+    generation_rate_limit_per_minute: int = 30
 
 
 def _float_env(name: str, default: float) -> float:
@@ -97,4 +99,8 @@ def load_config(dotenv_path: str | os.PathLike | None = None) -> AppConfig:
         session_cookie_secure=_bool_env("SESSION_COOKIE_SECURE", False),
         session_hours=max(1, _int_env("SESSION_HOURS", 168)),
         cors_origins=cors_origins_from_env(),
+        auth_rate_limit_per_minute=max(1, _int_env("AUTH_RATE_LIMIT_PER_MINUTE", 10)),
+        generation_rate_limit_per_minute=max(
+            1, _int_env("GENERATION_RATE_LIMIT_PER_MINUTE", 30)
+        ),
     )

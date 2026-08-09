@@ -174,3 +174,27 @@ def test_projects_and_pages_are_isolated_by_owner(tmp_path) -> None:
     with pytest.raises(LookupError):
         projects.get_page(other_id, created["pages"][0]["id"])
     database.close()
+
+
+def test_named_checkpoint_and_duplicate_from_revision(
+    projects: ProjectService,
+) -> None:
+    page = projects.create_project(OWNER_ID, "Source", "v1")["pages"][0]
+    projects.save_page(OWNER_ID, page["id"], "v2", expected_version=1)
+    checkpoint_page = projects.create_checkpoint(
+        OWNER_ID, page["id"], "Before launch", expected_version=2
+    )
+    checkpoint = projects.list_revisions(OWNER_ID, page["id"])[0]
+
+    assert checkpoint_page["version"] == 3
+    assert checkpoint["name"] == "Before launch"
+    assert checkpoint["source"] == "checkpoint"
+    duplicate = projects.duplicate_from_revision(
+        OWNER_ID,
+        page["id"],
+        checkpoint["id"],
+        name="Launch branch",
+    )
+    assert duplicate["name"] == "Launch branch"
+    assert duplicate["pages"][0]["html"] == "v2"
+    assert duplicate["pages"][0]["version"] == 1

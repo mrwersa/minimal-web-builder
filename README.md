@@ -37,6 +37,8 @@ A sleek, minimalist web application builder powered by AI (Gemini / OpenRouter).
 - Email/password accounts with Argon2id hashing, opaque server-side sessions, and owner-isolated projects
 - Owner-isolated reusable templates and Layout DNA stored in the application database
 - Durable conversation checkpoints and generation-job history shared by every generation path
+- Named revision checkpoints, restore, and one-click project branching from any revision
+- Database-backed generation/authentication rate limits, idempotency keys, and owner-scoped audit events
 
 
 ## Setup
@@ -67,7 +69,9 @@ A sleek, minimalist web application builder powered by AI (Gemini / OpenRouter).
 5. Open http://localhost:5173 (the Vite dev server proxies `/api` to :8000),
    create an account, and start a project. Set `SESSION_COOKIE_SECURE=true` in
    HTTPS production deployments; customize `SESSION_HOURS` and `CORS_ORIGINS`
-   when the frontend and API use different origins.
+   when the frontend and API use different origins. The authentication and
+   generation limits can be tuned with `AUTH_RATE_LIMIT_PER_MINUTE` and
+   `GENERATION_RATE_LIMIT_PER_MINUTE`.
 
 For a single-process production build, run `cd web && npm run build` then
 `uvicorn server.main:app --port 8000` and open http://localhost:8000/.
@@ -85,7 +89,7 @@ For a single-process production build, run `cd web && npm run build` then
 6. Use the "View Code" tab to see the HTML/CSS/JS
 7. In the Code tab, pick an export format: **Single HTML** downloads one self-contained `index.html`, or **Split** downloads `index.html`, `styles.css`, and `app.js` (inline styles and scripts are extracted into the separate files)
 8. In the sidebar you can **save the current page as a template**, then use the folder button beside a saved template to open it as a fresh conversation
-9. In **Projects**, create, search, rename, duplicate, or archive durable projects. Later edits autosave as immutable revisions; open Version history to restore an earlier result.
+9. In **Projects**, create, search, rename, duplicate, or archive durable projects. Later edits autosave as immutable revisions; add named checkpoints, restore an earlier result, or branch a new project from any revision in Version history.
 
 To refine a single section after generation, open the sidebar, pick a section from the "Regenerate section" dropdown, choose a **Refine focus** (General, Spacing, Typography, Layout, or Color), and press **Regenerate section**. The selected block is regenerated in place while the rest of the page stays untouched.
 
@@ -100,7 +104,8 @@ To edit the generated page directly, turn on **WYSIWYG editing** in the sidebar 
 5. Describe refinements in the chat bar — the agent applies them to the current page.
 6. Export your page as a single HTML file or split into HTML/CSS/JS.
 7. When a project is active, document changes autosave with an expected version so stale browser sessions cannot silently overwrite newer work.
-8. Conversation state and generation outcomes are checkpointed in the database, so a browser or server restart can restore the active thread.
+8. Conversation state, standalone edits, and generation outcomes are checkpointed in the database, so a browser or server restart restores the active thread.
+9. Mutating requests carry idempotency keys, sensitive generation/authentication routes are rate-limited, and mutation outcomes are written to owner-scoped audit history.
 
 ## Technologies
 
@@ -166,7 +171,7 @@ The detailed roadmap is in [ROADMAP.md](ROADMAP.md).
 Current priorities:
 
 - Phase 0: complete — product truth, reversible document changes, editor reliability, and full-stack CI
-- Phase 1: persistent projects, users, autosave, and durable revisions
+- Phase 1: complete — private projects, reusable assets, durable conversations/jobs, revision branching, and request hardening
 - Phase 2: a structured document model and trustworthy responsive visual editor
 - Phase 3: cancellable, measurable, patch-based AI generation
 - Phase 4: multi-page publishing, assets, forms, domains, and rollback

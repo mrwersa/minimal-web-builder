@@ -46,6 +46,7 @@ interface State {
   activePageId: string | null;
   activePageVersion: number;
   revisions: api.RevisionSummary[];
+  checkpointName: string;
   saveState: "idle" | "saving" | "saved" | "conflict";
   saveQueued: boolean;
 
@@ -76,6 +77,8 @@ interface State {
   saveActivePage: () => Promise<void>;
   refreshRevisions: () => Promise<void>;
   restoreRevision: (revisionId: string) => Promise<void>;
+  createCheckpoint: () => Promise<void>;
+  duplicateRevision: (revisionId: string, sequence: number) => Promise<void>;
   runChat: (message: string) => Promise<void>;
   restoreConversation: () => Promise<void>;
   clearChat: () => void;
@@ -85,6 +88,7 @@ interface State {
 }
 
 let autosaveTimer: ReturnType<typeof setTimeout> | null = null;
+let draftTimer: ReturnType<typeof setTimeout> | null = null;
 let projectRequestSequence = 0;
 const THREAD_STORAGE_KEY = "mwb_thread_id";
 
@@ -105,6 +109,19 @@ function scheduleAutosave(get: () => State, delay = 800) {
   autosaveTimer = setTimeout(() => {
     autosaveTimer = null;
     void get().saveActivePage();
+  }, delay);
+}
+
+function scheduleDraftSave(get: () => State, delay = 800) {
+  if (get().activePageId) return;
+  if (draftTimer) clearTimeout(draftTimer);
+  draftTimer = setTimeout(() => {
+    draftTimer = null;
+    const state = get();
+    if (state.activePageId || state.code === null) return;
+    void api.saveConversationDocument(state.threadId, state.code).catch((error) =>
+      useStore.setState({ error: errorMessage(error) }),
+    );
   }, delay);
 }
 
@@ -156,6 +173,7 @@ export const useStore = create<State>((set, get) => ({
   activePageId: null,
   activePageVersion: 0,
   revisions: [],
+  checkpointName: "",
   saveState: "idle",
   saveQueued: false,
 
@@ -189,6 +207,7 @@ export const useStore = create<State>((set, get) => ({
         profile: s.profile,
         current_code: s.code,
         layout_dna_guidance: s.layoutDnaGuidance,
+        thread_id: s.threadId,
       });
       get().setCodeWithHistory(res.html);
       set({ notes: res.notes, safetyAlerts: res.safety_alerts, busy: false });
@@ -213,6 +232,7 @@ export const useStore = create<State>((set, get) => ({
           color_limit: s.constraintColor,
           density: s.constraintDensity,
         },
+        thread_id: s.threadId,
       });
       get().setCodeWithHistory(res.html);
       set({ notes: res.notes, safetyAlerts: res.safety_alerts, busy: false });
@@ -254,6 +274,7 @@ export const useStore = create<State>((set, get) => ({
         profile: s.profile,
         layout_dna_guidance: s.layoutDnaGuidance,
         refine_aspect: s.refineAspect,
+        thread_id: s.threadId,
       });
       get().setCodeWithHistory(res.html);
       set({ notes: res.notes, safetyAlerts: res.safety_alerts, busy: false });
@@ -528,6 +549,49 @@ export const useStore = create<State>((set, get) => ({
     }
   },
 
+  createCheckpoint: async () => {
+    const s = get();
+    const name = s.checkpointName.trim();
+    if (!s.activePageId || !name) return;
+    try {
+      const page = await api.createCheckpoint(
+        s.activePageId,
+        name,
+        s.activePageVersion,
+      );
+      set({
+        checkpointName: "",
+        activePageVersion: page.version,
+        saveState: "saved",
+        error: null,
+      });
+      await get().refreshRevisions();
+    } catch (e) {
+      if (e instanceof api.PageVersionConflictError) {
+        set({ saveState: "conflict", error: e.message });
+      } else {
+        set({ error: errorMessage(e) });
+      }
+    }
+  },
+
+  duplicateRevision: async (revisionId, sequence) => {
+    const s = get();
+    if (!s.activePageId) return;
+    const source = s.projects.find((project) => project.id === s.activeProjectId);
+    try {
+      const project = await api.duplicateRevision(
+        s.activePageId,
+        revisionId,
+        `${source?.name ?? "Project"} · v${sequence}`,
+      );
+      await get().refreshProjects();
+      await get().openProject(project.id);
+    } catch (e) {
+      set({ error: errorMessage(e) });
+    }
+  },
+
   runChat: async (message) => {
     const s = get();
     const userMsg: api.ChatMessage = { role: "user", content: message };
@@ -590,6 +654,7 @@ export const useStore = create<State>((set, get) => ({
       saveState: activePageId && saveState !== "conflict" ? "idle" : saveState,
     });
     scheduleAutosave(get);
+    scheduleDraftSave(get);
   },
 
   redo: () => {
@@ -604,6 +669,7 @@ export const useStore = create<State>((set, get) => ({
       saveState: activePageId && saveState !== "conflict" ? "idle" : saveState,
     });
     scheduleAutosave(get);
+    scheduleDraftSave(get);
   },
 
   setCodeWithHistory: (newCode) => {
@@ -622,6 +688,7 @@ export const useStore = create<State>((set, get) => ({
       set({ code: newCode, saveState: nextSaveState });
     }
     scheduleAutosave(get);
+    scheduleDraftSave(get);
   },
 }));
 
@@ -629,6 +696,10 @@ export function resetWorkspace(): void {
   if (autosaveTimer) {
     clearTimeout(autosaveTimer);
     autosaveTimer = null;
+  }
+  if (draftTimer) {
+    clearTimeout(draftTimer);
+    draftTimer = null;
   }
   projectRequestSequence += 1;
   useStore.setState({

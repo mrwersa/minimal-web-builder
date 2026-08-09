@@ -10,6 +10,7 @@ from pydantic import BaseModel
 from server.assets import ReusableAssetService
 from server.auth_routes import Authenticated
 from server.concurrency import offload
+from server.mutations import run_idempotent
 from src.layout_dna import extract_layout_dna
 
 router = APIRouter(prefix="/api", tags=["reusable-assets"])
@@ -38,10 +39,16 @@ async def templates_list(request: Request, principal: Authenticated) -> dict[str
 async def templates_save(
     request: Request, body: TemplateSaveRequest, principal: Authenticated
 ) -> dict[str, str]:
-    saved = await offload(
-        _assets(request).save_template, principal.id, body.name, body.html
+    saved = await run_idempotent(
+        request,
+        principal,
+        "template.save",
+        body.model_dump(),
+        lambda: {
+            "saved": _assets(request).save_template(principal.id, body.name, body.html)
+        },
     )
-    return {"saved": saved}
+    return saved
 
 
 @router.get("/templates/{name}")
@@ -69,5 +76,10 @@ async def dnas_list(request: Request, principal: Authenticated) -> dict[str, Any
 async def dnas_save(
     request: Request, body: SaveDnaRequest, principal: Authenticated
 ) -> dict[str, Any]:
-    dna = await offload(extract_layout_dna, body.html)
-    return await offload(_assets(request).save_dna, principal.id, dna)
+    return await run_idempotent(
+        request,
+        principal,
+        "layout_dna.save",
+        body.model_dump(),
+        lambda: _assets(request).save_dna(principal.id, extract_layout_dna(body.html)),
+    )
