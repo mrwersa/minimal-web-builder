@@ -74,7 +74,7 @@ Exit metrics:
 - ✅ No cross-user access to projects or reusable assets.
 - ✅ Mutating API operations are idempotent where appropriate.
 
-## Phase 2: A trustworthy visual editor ⬜
+## Phase 2: A trustworthy visual editor 🔄
 
 Goal: common changes are faster by direct manipulation than by prompting.
 
