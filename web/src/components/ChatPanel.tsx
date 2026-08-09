@@ -2,9 +2,9 @@ import { useEffect, useRef, useState } from "react";
 import { Send, Trash2, MessageSquare } from "lucide-react";
 import { useStore } from "../store";
 import { cn } from "../lib/utils";
-import { Button } from "./ui/Button";
-import { Textarea } from "./ui/Textarea";
-import { Spinner } from "./ui/Spinner";
+import { Button } from "./ui/button";
+import { Textarea } from "./ui/textarea";
+import { Spinner } from "./ui/spinner";
 
 export default function ChatPanel() {
   const chatMessages = useStore((s) => s.chatMessages);
@@ -31,15 +31,15 @@ export default function ChatPanel() {
   return (
     <div className="flex h-full flex-col">
       {/* Header */}
-      <div className="flex shrink-0 items-center justify-between border-b border-border2 px-4 py-2">
-        <div className="flex items-center gap-2 text-sm font-semibold text-text2">
-          <MessageSquare className="h-4 w-4 text-muted2" />
+      <div className="flex shrink-0 items-center justify-between border-b border-border px-4 py-2">
+        <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
+          <MessageSquare className="h-4 w-4 text-muted-foreground" />
           Chat
         </div>
         {chatMessages.length > 0 && (
           <button
             onClick={clearChat}
-            className="flex items-center gap-1 rounded-md px-2 py-1 text-xs text-muted2 transition-colors hover:bg-bg hover:text-danger"
+            className="flex items-center gap-1 rounded-md px-2 py-1 text-xs text-muted-foreground transition-colors hover:bg-background hover:text-destructive"
           >
             <Trash2 className="h-3 w-3" />
             Clear
@@ -51,8 +51,8 @@ export default function ChatPanel() {
       <div ref={scrollRef} className="flex-1 space-y-3 overflow-y-auto px-4 py-3">
         {chatMessages.length === 0 && (
           <div className="flex h-full flex-col items-center justify-center gap-2 text-center">
-            <MessageSquare className="h-8 w-8 text-muted2/40" />
-            <p className="max-w-xs text-xs text-muted2">
+            <MessageSquare className="h-8 w-8 text-muted-foreground/40" />
+            <p className="max-w-xs text-xs text-muted-foreground">
               Start a conversation. Describe what you want, ask questions, or request changes.
             </p>
           </div>
@@ -63,23 +63,23 @@ export default function ChatPanel() {
             className={cn(
               "rounded-lg px-3 py-2 text-sm",
               msg.role === "user"
-                ? "ml-8 bg-accent text-white"
-                : "mr-8 bg-bg text-text2"
+                ? "ml-8 bg-primary text-primary-foreground"
+                : "mr-8 bg-background text-foreground"
             )}
           >
             <p className="whitespace-pre-wrap break-words">{msg.content}</p>
           </div>
         ))}
         {busy && (
-          <div className="mr-8 flex items-center gap-2 rounded-lg bg-bg px-3 py-2">
+          <div className="mr-8 flex items-center gap-2 rounded-lg bg-background px-3 py-2">
             <Spinner size="sm" />
-            <span className="text-xs text-muted2">Thinking…</span>
+            <span className="text-xs text-muted-foreground">Thinking…</span>
           </div>
         )}
       </div>
 
       {/* Input */}
-      <div className="shrink-0 border-t border-border2 px-4 py-3">
+      <div className="shrink-0 border-t border-border px-4 py-3">
         <div className="flex items-end gap-2">
           <Textarea
             ref={inputRef}

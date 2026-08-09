@@ -1,6 +1,12 @@
 import { useEffect, useState, type ReactNode } from "react";
-import { Input } from "../ui/Input";
-import { Textarea } from "../ui/Textarea";
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "../ui/accordion";
+import { Input } from "../ui/input";
+import { Textarea } from "../ui/textarea";
 
 function useCommittedDraft(value: string, onCommit: (value: string) => void) {
   const [draft, setDraft] = useState(value);
@@ -23,12 +29,12 @@ export function InspectorSection({
   children: ReactNode;
 }) {
   return (
-    <details open className="rounded-lg border border-border2 p-2">
-      <summary className="cursor-pointer text-[11px] font-semibold uppercase tracking-wide text-muted2">
-        {title}
-      </summary>
-      <div className="mt-2 space-y-2">{children}</div>
-    </details>
+    <Accordion type="multiple" defaultValue={["section"]} className="-mx-3 border-t">
+      <AccordionItem value="section" className="border-b-0">
+        <AccordionTrigger>{title}</AccordionTrigger>
+        <AccordionContent>{children}</AccordionContent>
+      </AccordionItem>
+    </Accordion>
   );
 }
 
@@ -46,7 +52,7 @@ export function CommitField({
   const { draft, setDraft, commit, reset } = useCommittedDraft(value, onCommit);
 
   return (
-    <label className="block space-y-1 text-[11px] font-medium text-muted2">
+    <label className="block space-y-1 text-[11px] font-medium text-muted-foreground">
       <span>{label}</span>
       <Input
         aria-label={label}
@@ -82,7 +88,7 @@ export function CommitTextarea({
   const { draft, setDraft, commit, reset } = useCommittedDraft(value, onCommit);
 
   return (
-    <label className="block space-y-1 text-xs font-medium text-muted2">
+    <label className="block space-y-1 text-xs font-medium text-muted-foreground">
       <span>{label}</span>
       <Textarea
         aria-label={label}

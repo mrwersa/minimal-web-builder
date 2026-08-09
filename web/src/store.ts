@@ -8,6 +8,14 @@ import {
 } from "./editor/document";
 import { errorMessage } from "./lib/errors";
 
+export type CanvasViewport = "desktop" | "tablet" | "mobile";
+
+export const VIEWPORT_WIDTHS: Record<CanvasViewport, number | null> = {
+  desktop: null,
+  tablet: 768,
+  mobile: 390,
+};
+
 interface State {
   options: api.OptionsResponse | null;
   optionsError: string | null;
@@ -26,6 +34,10 @@ interface State {
 
   editing: boolean;
   selectedNodeId: string | null;
+  // Canvas framing lives here rather than in the workspace so the top bar can
+  // drive it and the framing survives switching between preview and editing.
+  viewport: CanvasViewport;
+  zoom: number;
 
   code: string | null;
   editorDocument: EditorDocumentV1 | null;
@@ -172,6 +184,8 @@ export const useStore = create<State>((set, get) => ({
 
   editing: false,
   selectedNodeId: null,
+  viewport: "desktop",
+  zoom: 1,
 
   code: null,
   editorDocument: null,

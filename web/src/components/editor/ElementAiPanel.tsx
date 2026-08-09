@@ -2,8 +2,8 @@ import { useEffect, useState } from "react";
 import { Sparkles } from "lucide-react";
 import type { ElementNode } from "../../editor/document";
 import { useStore } from "../../store";
-import { Button } from "../ui/Button";
-import { Input } from "../ui/Input";
+import { Button } from "../ui/button";
+import { Input } from "../ui/input";
 
 export default function ElementAiPanel({ node }: { node: ElementNode | null }) {
   const [instruction, setInstruction] = useState("");
@@ -21,11 +21,11 @@ export default function ElementAiPanel({ node }: { node: ElementNode | null }) {
   };
 
   return (
-    <div className="border-b border-border2 p-3">
-      <div className="mb-2 flex items-center gap-1.5 text-xs font-semibold text-text2">
-        <Sparkles className="h-3.5 w-3.5 text-accent" /> AI edit this element
+    <div className="border-b border-border p-3">
+      <div className="mb-2 flex items-center gap-1.5 text-xs font-semibold text-foreground">
+        <Sparkles className="h-3.5 w-3.5 text-primary" /> AI edit this element
       </div>
-      <p className="mb-2 text-[11px] leading-relaxed text-muted2">
+      <p className="mb-2 text-[11px] leading-relaxed text-muted-foreground">
         The update is restricted to &lt;{node.tag}&gt; and its descendants.
       </p>
       <form

@@ -9,7 +9,7 @@ import {
 import { exportPage } from "../api";
 import { compileDocument } from "../editor/document";
 import { useStore } from "../store";
-import { Button } from "./ui/Button";
+import { Button } from "./ui/button";
 import AdvancedCodePanel from "./editor/AdvancedCodePanel";
 
 export default function CodePanel() {
@@ -28,8 +28,8 @@ export default function CodePanel() {
   if (!code) {
     return (
       <div className="flex h-full flex-col items-center justify-center gap-2 text-center">
-        <FileCode2 className="h-10 w-10 text-muted2" />
-        <p className="text-sm text-muted">No code generated yet.</p>
+        <FileCode2 className="h-10 w-10 text-muted-foreground" />
+        <p className="text-sm text-muted-foreground">No code generated yet.</p>
       </div>
     );
   }
@@ -60,7 +60,7 @@ export default function CodePanel() {
     <div className="flex h-full flex-col overflow-hidden p-4">
       <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
         <div
-          className="flex rounded-lg border border-border2 p-0.5"
+          className="flex rounded-lg border border-border p-0.5"
           aria-label="Code view"
         >
           {(["output", "advanced"] as const).map((value) => (
@@ -69,8 +69,8 @@ export default function CodePanel() {
               onClick={() => setView(value)}
               className={
                 view === value
-                  ? "rounded-md bg-accent px-3 py-1.5 text-sm font-medium text-white"
-                  : "rounded-md px-3 py-1.5 text-sm text-muted transition-colors hover:text-text2"
+                  ? "rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground"
+                  : "rounded-md px-3 py-1.5 text-sm text-muted-foreground transition-colors hover:text-foreground"
               }
             >
               {value === "output" ? (
@@ -87,15 +87,15 @@ export default function CodePanel() {
         </div>
         {view === "output" && (
           <div className="flex items-center gap-3">
-            <div className="flex rounded-lg border border-border2 p-0.5">
+            <div className="flex rounded-lg border border-border p-0.5">
               {(["single", "split"] as const).map((value) => (
                 <button
                   key={value}
                   onClick={() => setMode(value)}
                   className={
                     mode === value
-                      ? "rounded-md bg-accent px-3 py-1.5 text-sm font-medium text-white"
-                      : "rounded-md px-3 py-1.5 text-sm text-muted transition-colors hover:text-text2"
+                      ? "rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground"
+                      : "rounded-md px-3 py-1.5 text-sm text-muted-foreground transition-colors hover:text-foreground"
                   }
                 >
                   {value === "single" ? "Single HTML" : "Split"}
@@ -123,7 +123,7 @@ export default function CodePanel() {
                 <button
                   key={name}
                   onClick={() => download(name, files[name])}
-                  className="flex items-center gap-1.5 rounded-lg border border-border2 px-3 py-2 text-xs text-text2 transition-colors hover:border-accent hover:text-accent"
+                  className="flex items-center gap-1.5 rounded-lg border border-border px-3 py-2 text-xs text-foreground transition-colors hover:border-primary hover:text-primary"
                 >
                   {fileIcons[name] ?? <Download className="h-3.5 w-3.5" />}
                   {name}
@@ -132,7 +132,7 @@ export default function CodePanel() {
             </div>
           )}
 
-          <pre className="code flex-1 overflow-auto rounded-xl border border-border2 bg-surface p-4 text-text2">
+          <pre className="code flex-1 overflow-auto rounded-xl border border-border bg-surface p-4 text-foreground">
             {portableCode}
           </pre>
         </>

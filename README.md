@@ -45,6 +45,8 @@ A sleek, minimalist web application builder powered by AI (Gemini / OpenRouter).
 - Element-scoped AI editing that uses stable node IDs and applies only the generated target subtree
 - Keyboard-navigable layers, document shortcuts, and a searchable accessible command palette
 - Explicit, undoable advanced editors for head markup, custom CSS, and sandboxed body scripts
+- A canvas-centric three-pane workspace (layers and setup left, device canvas centre, inspector and chat right)
+- Light and dark themes that follow the system preference, with a manual override
 - Durable per-generation latency, outcome, and failure-cause metrics with a queryable success-rate and P50/P95 summary
 - Configurable provider timeouts and a bounded generation concurrency limit
 - Automatic retry with jittered exponential backoff for transient provider failures, skipped for permanent ones and bounded by an overall deadline
@@ -128,7 +130,7 @@ To edit the generated page directly, turn on **WYSIWYG editing** in the sidebar 
 ## Technologies
 
 - **React 18 + Vite + TypeScript** — single-page frontend
-- **Tailwind CSS** — styling, themed from the shared design tokens
+- **Tailwind CSS + Radix UI (shadcn/ui pattern)** — accessible primitives on a CSS-variable theme with light/dark modes
 - **Zustand** — lightweight state
 - **FastAPI** — backend serving the existing `src/*` generation, safety, and export logic
 - **LangGraph** — conversational agent with memory, guardrails, and resilience

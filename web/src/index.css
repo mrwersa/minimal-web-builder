@@ -2,37 +2,165 @@
 @tailwind components;
 @tailwind utilities;
 
-html,
-body,
-#root {
+@layer base {
+  /*
+   * Theme tokens. Every colour in the app resolves through one of these, so a
+   * theme change is a variable change rather than a component edit. Values are
+   * bare HSL channels because Tailwind composes them with alpha modifiers
+   * (`bg-primary/10`).
+   */
+  :root {
+    --background: 210 40% 98%;
+    --foreground: 222 47% 11%;
+
+    --canvas: 214 32% 91%;
+
+    --surface: 0 0% 100%;
+    --surface-foreground: 222 47% 11%;
+
+    --muted: 210 40% 96%;
+    --muted-foreground: 215 16% 47%;
+
+    --primary: 221 83% 53%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 210 40% 96%;
+    --secondary-foreground: 222 47% 11%;
+
+    --accent: 210 40% 96%;
+    --accent-foreground: 222 47% 11%;
+
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 100%;
+
+    --success: 142 71% 45%;
+    --success-foreground: 0 0% 100%;
+
+    --warning: 38 92% 50%;
+    --warning-foreground: 0 0% 100%;
+
+    --border: 214 32% 91%;
+    --input: 214 32% 91%;
+    --ring: 221 83% 53%;
+
+    --radius: 0.5rem;
+  }
+
+  .dark {
+    --background: 222 47% 11%;
+    --foreground: 210 40% 98%;
+
+    --canvas: 229 42% 8%;
+
+    --surface: 217 33% 17%;
+    --surface-foreground: 210 40% 98%;
+
+    --muted: 217 33% 22%;
+    --muted-foreground: 215 20% 65%;
+
+    --primary: 217 91% 60%;
+    --primary-foreground: 222 47% 11%;
+
+    --secondary: 217 33% 22%;
+    --secondary-foreground: 210 40% 98%;
+
+    --accent: 217 33% 22%;
+    --accent-foreground: 210 40% 98%;
+
+    --destructive: 0 63% 51%;
+    --destructive-foreground: 210 40% 98%;
+
+    --success: 142 69% 45%;
+    --success-foreground: 222 47% 11%;
+
+    --warning: 38 92% 50%;
+    --warning-foreground: 222 47% 11%;
+
+    --border: 217 33% 24%;
+    --input: 217 33% 24%;
+    --ring: 217 91% 60%;
+  }
+
+  * {
+    @apply border-border;
+  }
+
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+    margin: 0;
+    font-feature-settings:
+      "rlig" 1,
+      "calt" 1;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* Scrollbars that recede into the surface they sit on. */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: hsl(var(--border)) transparent;
+  }
+  *::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  *::-webkit-scrollbar-thumb {
+    background: hsl(var(--border));
+    border-radius: 8px;
+    border: 2px solid transparent;
+    background-clip: padding-box;
+  }
+  *::-webkit-scrollbar-thumb:hover {
+    background: hsl(var(--muted-foreground) / 0.5);
+    background-clip: padding-box;
+  }
+}
+
+@layer components {
+  /*
+   * The area the device frame floats in. A flat tone reads as "not the page"
+   * without competing with the page itself for attention.
+   */
+  .canvas-backdrop {
+    background-color: hsl(var(--canvas));
+  }
+}
+
+/*
+ * GrapeJS ships its own dark canvas chrome and toolbar colours. The canvas is
+ * framed by the app, so let the app's surface show through and pull its accents
+ * onto the theme tokens.
+ */
+.gjs-editor,
+.gjs-cv-canvas,
+.gjs-cv-canvas__frames,
+.gjs-cv-canvas__frame,
+.gjs-frame-wrapper,
+.gjs-frame {
+  background-color: #fff !important;
+}
+.gjs-cv-canvas {
   height: 100%;
+  width: 100%;
+  top: 0;
+}
+.gjs-toolbar {
+  background-color: hsl(var(--primary));
+  border-radius: calc(var(--radius) - 4px);
+}
+.gjs-toolbar-item {
+  color: hsl(var(--primary-foreground));
+}
+.gjs-badge {
+  background-color: hsl(var(--primary));
+  color: hsl(var(--primary-foreground));
 }
 
-body {
-  margin: 0;
-  background: #f7f9fb;
-  color: #222;
-  font-family: Inter, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-  -webkit-font-smoothing: antialiased;
-}
-
-/* thin custom scrollbars */
-* {
-  scrollbar-width: thin;
-  scrollbar-color: #cfd8e3 transparent;
-}
-*::-webkit-scrollbar {
-  width: 10px;
-  height: 10px;
-}
-*::-webkit-scrollbar-thumb {
-  background: #cfd8e3;
-  border-radius: 8px;
-  border: 2px solid transparent;
-  background-clip: padding-box;
-}
-
-/* code blocks */
 pre.code {
   white-space: pre-wrap;
   word-break: break-word;

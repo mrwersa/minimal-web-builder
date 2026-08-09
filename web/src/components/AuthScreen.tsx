@@ -1,10 +1,10 @@
 import { FormEvent, useState } from "react";
 import { Sparkles } from "lucide-react";
 import { useAuthStore } from "../authStore";
-import { Button } from "./ui/Button";
-import { Input } from "./ui/Input";
-import { InlineError } from "./ui/InlineError";
-import { Spinner } from "./ui/Spinner";
+import { Button } from "./ui/button";
+import { Input } from "./ui/input";
+import { InlineError } from "./ui/field";
+import { Spinner } from "./ui/spinner";
 
 export default function AuthScreen() {
   const [mode, setMode] = useState<"login" | "register">("login");
@@ -31,15 +31,15 @@ export default function AuthScreen() {
   }
 
   return (
-    <main className="flex h-full items-center justify-center bg-bg px-4 text-text2">
-      <section className="w-full max-w-sm rounded-2xl border border-border2 bg-surface p-7 shadow-sm">
+    <main className="flex h-full items-center justify-center bg-background px-4 text-foreground">
+      <section className="w-full max-w-sm rounded-2xl border border-border bg-surface p-7 shadow-sm">
         <div className="mb-6 flex items-center gap-3">
-          <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-accentSoft text-accent">
+          <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10 text-primary">
             <Sparkles className="h-5 w-5" />
           </span>
           <div>
             <h1 className="font-semibold">Minimal Web Builder</h1>
-            <p className="text-sm text-muted">
+            <p className="text-sm text-muted-foreground">
               {mode === "login" ? "Welcome back" : "Create your workspace"}
             </p>
           </div>
@@ -68,20 +68,20 @@ export default function AuthScreen() {
               required
             />
             {mode === "register" && (
-              <span className="block text-xs font-normal text-muted">
+              <span className="block text-xs font-normal text-muted-foreground">
                 Use at least 12 characters.
               </span>
             )}
           </label>
           {error && <InlineError message={error} onRetry={() => void submitCredentials()} />}
           <Button className="w-full" disabled={submitting} type="submit">
-            {submitting && <Spinner size="sm" className="border-white/30 border-t-white" />}
+            {submitting && <Spinner size="sm" />}
             {mode === "login" ? "Sign in" : "Create account"}
           </Button>
         </form>
 
         <button
-          className="mt-5 w-full text-sm text-muted hover:text-accent"
+          className="mt-5 w-full text-sm text-muted-foreground hover:text-primary"
           onClick={changeMode}
           type="button"
         >
