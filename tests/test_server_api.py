@@ -1,10 +1,13 @@
 from __future__ import annotations
 
+from dataclasses import replace
+
 import pytest
 from fastapi.testclient import TestClient
 
 from server.assets import ReusableAssetService
 from server.auth import AuthService
+from server.controls import RequestControlService
 from server.database import Database
 from server.main import app
 from server.orchestrator import GenerationOrchestrator
@@ -40,6 +43,7 @@ def client(monkeypatch: pytest.MonkeyPatch, tmp_path):
     app.state.projects = ProjectService(database.sessions)
     app.state.assets = ReusableAssetService(database.sessions)
     app.state.orchestrator = GenerationOrchestrator(database.sessions)
+    app.state.controls = RequestControlService(database.sessions)
     test_client = TestClient(app)
     response = test_client.post(
         "/api/auth/register",
@@ -98,11 +102,16 @@ def test_generate_uses_mocked_output(
         "server.main.generate",
         lambda *a, **k: "<!doctype html><html><body><h1>Hi</h1></body></html>",
     )
-    r = client.post("/api/generate", json={"prompt": "a coffee shop landing page"})
+    r = client.post(
+        "/api/generate",
+        json={"prompt": "a coffee shop landing page", "thread_id": "generate-thread"},
+    )
     assert r.status_code == 200
     j = r.json()
     assert "<h1>Hi</h1>" in j["html"]
     assert j["settings"]["tone"] == "minimal"
+    checkpoint = client.get("/api/conversations/generate-thread").json()
+    assert checkpoint["current_code"] == j["html"]
     jobs = client.get("/api/generation-jobs").json()["jobs"]
     assert jobs[0]["operation"] == "generate"
     assert jobs[0]["status"] == "succeeded"
@@ -220,10 +229,16 @@ def test_chat_checkpoint_and_job_are_durable(client: TestClient) -> None:
 
     assert response.status_code == 200
     assert response.json()["intent"] == "answer"
+    draft = client.put(
+        "/api/conversations/conversation-1/document",
+        json={"code": "<main>manually edited</main>"},
+    )
+    assert draft.status_code == 200
     app.state.orchestrator = GenerationOrchestrator(app.state.database.sessions)
     checkpoint = client.get("/api/conversations/conversation-1")
     assert checkpoint.status_code == 200
     assert checkpoint.json()["thread_id"] == "conversation-1"
+    assert checkpoint.json()["current_code"] == "<main>manually edited</main>"
     assert [item["role"] for item in checkpoint.json()["messages"]] == [
         "user",
         "assistant",
@@ -263,13 +278,30 @@ def test_project_revision_api_round_trip(client: TestClient) -> None:
     revisions = client.get(f"/api/pages/{page['id']}/revisions").json()["revisions"]
     assert [revision["sequence"] for revision in revisions] == [2, 1]
 
+    checkpoint = client.post(
+        f"/api/pages/{page['id']}/checkpoints",
+        json={"name": "Before launch", "expected_version": 2},
+    )
+    assert checkpoint.status_code == 201
+    assert checkpoint.json()["version"] == 3
+    checkpoint_revision = client.get(f"/api/pages/{page['id']}/revisions").json()[
+        "revisions"
+    ][0]
+    assert checkpoint_revision["name"] == "Before launch"
+    revision_copy = client.post(
+        f"/api/pages/{page['id']}/revisions/{revisions[1]['id']}/duplicate",
+        json={"name": "Historical copy"},
+    )
+    assert revision_copy.status_code == 201
+    assert revision_copy.json()["pages"][0]["html"] == "<main>v1</main>"
+
     restored = client.post(
         f"/api/pages/{page['id']}/revisions/{revisions[1]['id']}/restore",
-        json={"expected_version": 2},
+        json={"expected_version": 3},
     )
     assert restored.status_code == 200
     assert restored.json()["html"] == "<main>v1</main>"
-    assert restored.json()["version"] == 3
+    assert restored.json()["version"] == 4
 
     renamed = client.patch(
         f"/api/projects/{created['id']}", json={"name": "Renamed Product"}
@@ -295,6 +327,34 @@ def test_project_revision_api_round_trip(client: TestClient) -> None:
         item["id"] for item in client.get("/api/projects").json()["projects"]
     ]
     assert created["id"] not in project_ids
+
+
+def test_project_create_replays_idempotent_response(client: TestClient) -> None:
+    headers = {"Idempotency-Key": "create-project-1"}
+    payload = {"name": "Only once", "html": "<main>one</main>"}
+
+    first = client.post("/api/projects", json=payload, headers=headers)
+    replay = client.post("/api/projects", json=payload, headers=headers)
+
+    assert first.status_code == replay.status_code == 201
+    assert first.json()["id"] == replay.json()["id"]
+    assert len(client.get("/api/projects").json()["projects"]) == 1
+    conflict = client.post(
+        "/api/projects",
+        json={"name": "Different", "html": ""},
+        headers=headers,
+    )
+    assert conflict.status_code == 409
+
+
+def test_mutations_create_owner_scoped_audit_events(client: TestClient) -> None:
+    response = client.post("/api/projects", json={"name": "Audited", "html": ""})
+    assert response.status_code == 201
+
+    events = client.get("/api/audit-events").json()["events"]
+
+    assert events[0]["action"] == "POST /api/projects"
+    assert events[0]["status_code"] == 201
 
 
 def test_project_api_requires_authentication(client: TestClient) -> None:
@@ -335,6 +395,20 @@ def test_duplicate_registration_is_rejected(client: TestClient) -> None:
     )
 
     assert response.status_code == 409
+
+
+def test_auth_rate_limit_returns_retry_after(client: TestClient) -> None:
+    app.state.client.config = replace(
+        app.state.client.config, auth_rate_limit_per_minute=1
+    )
+
+    response = client.post(
+        "/api/auth/login",
+        json={"email": "owner@example.test", "password": "correct horse battery"},
+    )
+
+    assert response.status_code == 429
+    assert response.headers["retry-after"] == "60"
 
 
 def test_project_api_does_not_expose_another_users_project(client: TestClient) -> None:

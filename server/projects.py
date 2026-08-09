@@ -34,6 +34,7 @@ _REVISION_SOURCES = {
     "manual",
     "generation",
     "restore",
+    "checkpoint",
 }
 
 
@@ -227,6 +228,48 @@ class ProjectService:
             self._touch_project(session, page)
             return self._page_snapshot(session, page)
 
+    def create_checkpoint(
+        self, owner_id: str, page_id: str, name: str, *, expected_version: int
+    ) -> dict[str, Any]:
+        clean_name = _project_name(name)
+        with self._sessions.begin() as session:
+            page = self._owned_page(session, owner_id, page_id)
+            if page.version != expected_version:
+                raise VersionConflictError(page.version)
+            current = self._current_revision(session, page)
+            self._append_revision(
+                session,
+                page,
+                current.html if current else "",
+                "checkpoint",
+                name=clean_name,
+            )
+            self._touch_project(session, page)
+            return self._page_snapshot(session, page)
+
+    def duplicate_from_revision(
+        self,
+        owner_id: str,
+        page_id: str,
+        revision_id: str,
+        *,
+        name: str,
+    ) -> dict[str, Any]:
+        clean_name = _project_name(name)
+        with self._sessions.begin() as session:
+            source_page = self._owned_page(session, owner_id, page_id)
+            revision = session.get(RevisionRecord, revision_id)
+            if revision is None or revision.page_id != source_page.id:
+                raise ProjectNotFoundError("Revision not found")
+            project = ProjectRecord(owner_id=owner_id, name=clean_name)
+            session.add(project)
+            session.flush()
+            page = PageRecord(project_id=project.id, name="Home", slug="home")
+            session.add(page)
+            session.flush()
+            self._append_revision(session, page, revision.html, "duplicate")
+            return self._project_snapshot(session, project)
+
     @staticmethod
     def _owned_project(
         session: Session, owner_id: str, project_id: str
@@ -259,7 +302,12 @@ class ProjectService:
 
     @staticmethod
     def _append_revision(
-        session: Session, page: PageRecord, html: str, source: str
+        session: Session,
+        page: PageRecord,
+        html: str,
+        source: str,
+        *,
+        name: str | None = None,
     ) -> RevisionRecord:
         expected_version = page.version
         next_version = expected_version + 1
@@ -271,6 +319,7 @@ class ProjectService:
             sequence=next_version,
             html=html,
             source=source,
+            name=name,
             parent_revision_id=page.current_revision_id,
             created_at=created_at,
         )
@@ -353,6 +402,7 @@ class ProjectService:
             "page_id": revision.page_id,
             "sequence": revision.sequence,
             "source": revision.source,
+            "name": revision.name,
             "parent_revision_id": revision.parent_revision_id,
             "created_at": isoformat_utc(revision.created_at),
         }

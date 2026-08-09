@@ -42,12 +42,12 @@ Goal: make every documented workflow reliable before adding platform infrastruct
 
 Exit metrics:
 
-- Zero known broken documented workflows.
-- All frontend and backend checks required on pull requests.
-- Visual editing does not silently remove page metadata or JavaScript.
-- Every meaningful document mutation is reversible.
+- ✅ Zero known broken documented workflows.
+- ✅ All frontend and backend checks required on pull requests.
+- ✅ Visual editing does not silently remove page metadata or JavaScript.
+- ✅ Every meaningful document mutation is reversible.
 
-## Phase 1: Projects and durable revisions 🔄
+## Phase 1: Projects and durable revisions ✅
 
 Goal: users can safely leave and return to their work.
 
@@ -60,19 +60,19 @@ Goal: users can safely leave and return to their work.
 - ✅ Add `conversations` and `generation_jobs` persistence.
 - ✅ Add Alembic database migrations and keep runtime schema creation local to SQLite.
 - ✅ Expand the project browser with rename, duplicate, archive, and search.
-- ⬜ Add named checkpoints and duplicate-from-revision.
+- ✅ Add named checkpoints and duplicate-from-revision.
 - ✅ Move templates and Layout DNA into owner-scoped records.
 - ✅ Add first-party authentication and project authorization.
-- Add rate limits and audit events.
+- ✅ Add rate limits and audit events.
 - ✅ Unify `/generate`, `/generate-section`, and `/chat` behind one generation orchestrator.
 - ✅ Persist conversation checkpoints instead of using process-local memory.
 
 Exit metrics:
 
-- Browser refresh and server restart do not lose work.
-- Every document change is recoverable.
-- No cross-user access to projects or reusable assets.
-- Mutating API operations are idempotent where appropriate.
+- ✅ Browser refresh and server restart do not lose work.
+- ✅ Every document change is recoverable.
+- ✅ No cross-user access to projects or reusable assets.
+- ✅ Mutating API operations are idempotent where appropriate.
 
 ## Phase 2: A trustworthy visual editor ⬜
 

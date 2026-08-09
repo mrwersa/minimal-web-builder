@@ -6,18 +6,17 @@ import os
 from logging.config import fileConfig
 
 from alembic import context
-from dotenv import load_dotenv
+from dotenv import dotenv_values
 from sqlalchemy import engine_from_config, pool
 
 from server import models  # noqa: F401 - registers model metadata
 from server.database import Base
 
 config = context.config
-load_dotenv()
 if config.config_file_name is not None:
     fileConfig(config.config_file_name, disable_existing_loggers=False)
 
-database_url = os.getenv("DATABASE_URL")
+database_url = os.getenv("DATABASE_URL") or dotenv_values().get("DATABASE_URL")
 if database_url:
     config.set_main_option("sqlalchemy.url", database_url.replace("%", "%%"))
 

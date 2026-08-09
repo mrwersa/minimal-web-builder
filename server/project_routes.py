@@ -9,6 +9,7 @@ from pydantic import BaseModel
 
 from server.auth_routes import Authenticated
 from server.concurrency import offload
+from server.mutations import run_idempotent
 from server.projects import ProjectService
 
 router = APIRouter(prefix="/api", tags=["projects"])
@@ -37,6 +38,15 @@ class RevisionRestoreRequest(BaseModel):
     expected_version: int
 
 
+class CheckpointCreateRequest(BaseModel):
+    name: str
+    expected_version: int
+
+
+class RevisionDuplicateRequest(BaseModel):
+    name: str
+
+
 def _projects(request: Request) -> ProjectService:
     return request.app.state.projects
 
@@ -63,8 +73,12 @@ async def projects_create(
     body: ProjectCreateRequest,
     principal: Authenticated,
 ) -> dict[str, Any]:
-    return await offload(
-        _projects(request).create_project, principal.id, body.name, body.html
+    return await run_idempotent(
+        request,
+        principal,
+        "project.create",
+        body.model_dump(),
+        lambda: _projects(request).create_project(principal.id, body.name, body.html),
     )
 
 
@@ -96,8 +110,14 @@ async def projects_duplicate(
     body: ProjectDuplicateRequest,
     principal: Authenticated,
 ) -> dict[str, Any]:
-    return await offload(
-        _projects(request).duplicate_project, principal.id, project_id, name=body.name
+    return await run_idempotent(
+        request,
+        principal,
+        "project.duplicate",
+        {"project_id": project_id, **body.model_dump()},
+        lambda: _projects(request).duplicate_project(
+            principal.id, project_id, name=body.name
+        ),
     )
 
 
@@ -126,13 +146,18 @@ async def pages_save(
     body: PageSaveRequest,
     principal: Authenticated,
 ) -> dict[str, Any]:
-    return await offload(
-        _projects(request).save_page,
-        principal.id,
-        page_id,
-        body.html,
-        expected_version=body.expected_version,
-        source=body.source,
+    return await run_idempotent(
+        request,
+        principal,
+        "page.save",
+        {"page_id": page_id, **body.model_dump()},
+        lambda: _projects(request).save_page(
+            principal.id,
+            page_id,
+            body.html,
+            expected_version=body.expected_version,
+            source=body.source,
+        ),
     )
 
 
@@ -154,10 +179,58 @@ async def revisions_restore(
     body: RevisionRestoreRequest,
     principal: Authenticated,
 ) -> dict[str, Any]:
-    return await offload(
-        _projects(request).restore_revision,
-        principal.id,
-        page_id,
-        revision_id,
-        expected_version=body.expected_version,
+    return await run_idempotent(
+        request,
+        principal,
+        "revision.restore",
+        {"page_id": page_id, "revision_id": revision_id, **body.model_dump()},
+        lambda: _projects(request).restore_revision(
+            principal.id,
+            page_id,
+            revision_id,
+            expected_version=body.expected_version,
+        ),
+    )
+
+
+@router.post("/pages/{page_id}/checkpoints", status_code=201)
+async def checkpoints_create(
+    request: Request,
+    page_id: str,
+    body: CheckpointCreateRequest,
+    principal: Authenticated,
+) -> dict[str, Any]:
+    return await run_idempotent(
+        request,
+        principal,
+        "checkpoint.create",
+        {"page_id": page_id, **body.model_dump()},
+        lambda: _projects(request).create_checkpoint(
+            principal.id,
+            page_id,
+            body.name,
+            expected_version=body.expected_version,
+        ),
+    )
+
+
+@router.post("/pages/{page_id}/revisions/{revision_id}/duplicate", status_code=201)
+async def revisions_duplicate(
+    request: Request,
+    page_id: str,
+    revision_id: str,
+    body: RevisionDuplicateRequest,
+    principal: Authenticated,
+) -> dict[str, Any]:
+    return await run_idempotent(
+        request,
+        principal,
+        "revision.duplicate",
+        {"page_id": page_id, "revision_id": revision_id, **body.model_dump()},
+        lambda: _projects(request).duplicate_from_revision(
+            principal.id,
+            page_id,
+            revision_id,
+            name=body.name,
+        ),
     )

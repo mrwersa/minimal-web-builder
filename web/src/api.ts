@@ -57,6 +57,7 @@ export interface RevisionSummary {
   page_id: string;
   sequence: number;
   source: string;
+  name: string | null;
   parent_revision_id: string | null;
   created_at: string;
 }
@@ -67,10 +68,28 @@ export class PageVersionConflictError extends Error {
   }
 }
 
+async function readPageResponse(
+  response: Response,
+  expectedVersion: number,
+  fallback: string,
+): Promise<PageSnapshot> {
+  if (response.status === 409) {
+    const payload = await response.json();
+    throw new PageVersionConflictError(
+      payload.detail?.current_version ?? expectedVersion,
+    );
+  }
+  return readJson(response, fallback);
+}
+
 const JSON_HEADERS = { "Content-Type": "application/json" };
 
 function jsonRequest(method: string, body: unknown): RequestInit {
-  return { method, headers: JSON_HEADERS, body: JSON.stringify(body) };
+  return {
+    method,
+    headers: { ...JSON_HEADERS, "Idempotency-Key": crypto.randomUUID() },
+    body: JSON.stringify(body),
+  };
 }
 
 async function readJson<T>(response: Response, fallback: string): Promise<T> {
@@ -134,6 +153,7 @@ export async function generate(req: {
   current_code: string | null;
   layout_dna_guidance: string;
   constraints?: { sections: string[]; color_limit: string; density: string };
+  thread_id: string;
 }): Promise<GenerateResponse> {
   return requestJson(
     "/api/generate",
@@ -161,6 +181,7 @@ export async function regenerateSection(req: {
   profile: string | null;
   layout_dna_guidance: string;
   refine_aspect: string | null;
+  thread_id: string;
 }): Promise<{ html: string; safety_alerts: string[]; notes: string[] }> {
   return requestJson(
     "/api/generate-section",
@@ -244,11 +265,7 @@ export async function savePage(
     `/api/pages/${encodeURIComponent(pageId)}/document`,
     jsonRequest("PUT", { html, expected_version: expectedVersion, source }),
   );
-  if (r.status === 409) {
-    const d = await r.json();
-    throw new PageVersionConflictError(d.detail?.current_version ?? expectedVersion);
-  }
-  return readJson(r, "Unable to save page");
+  return readPageResponse(r, expectedVersion, "Unable to save page");
 }
 
 export async function fetchRevisions(pageId: string): Promise<RevisionSummary[]> {
@@ -269,11 +286,31 @@ export async function restoreRevision(
     `/api/pages/${encodeURIComponent(pageId)}/revisions/${encodeURIComponent(revisionId)}/restore`,
     jsonRequest("POST", { expected_version: expectedVersion }),
   );
-  if (r.status === 409) {
-    const d = await r.json();
-    throw new PageVersionConflictError(d.detail?.current_version ?? expectedVersion);
-  }
-  return readJson(r, "Unable to restore revision");
+  return readPageResponse(r, expectedVersion, "Unable to restore revision");
+}
+
+export async function createCheckpoint(
+  pageId: string,
+  name: string,
+  expectedVersion: number,
+): Promise<PageSnapshot> {
+  const response = await fetch(
+    `/api/pages/${encodeURIComponent(pageId)}/checkpoints`,
+    jsonRequest("POST", { name, expected_version: expectedVersion }),
+  );
+  return readPageResponse(response, expectedVersion, "Unable to create checkpoint");
+}
+
+export async function duplicateRevision(
+  pageId: string,
+  revisionId: string,
+  name: string,
+): Promise<ProjectSnapshot> {
+  return requestJson(
+    `/api/pages/${encodeURIComponent(pageId)}/revisions/${encodeURIComponent(revisionId)}/duplicate`,
+    jsonRequest("POST", { name }),
+    "Unable to duplicate revision",
+  );
 }
 
 export async function saveTemplate(name: string, html: string): Promise<void> {
@@ -361,6 +398,17 @@ export async function fetchConversation(
   const response = await fetch(`/api/conversations/${encodeURIComponent(threadId)}`);
   if (response.status === 404) return null;
   return readJson(response, "Unable to restore conversation");
+}
+
+export async function saveConversationDocument(
+  threadId: string,
+  code: string,
+): Promise<void> {
+  await requestJson(
+    `/api/conversations/${encodeURIComponent(threadId)}/document`,
+    jsonRequest("PUT", { code }),
+    "Unable to save draft",
+  );
 }
 
 export async function chat(req: {

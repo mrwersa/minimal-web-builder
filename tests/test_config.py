@@ -63,6 +63,8 @@ def test_load_config_reads_session_and_cors_settings(monkeypatch) -> None:
     monkeypatch.setenv("SESSION_COOKIE_SECURE", "true")
     monkeypatch.setenv("SESSION_HOURS", "24")
     monkeypatch.setenv("CORS_ORIGINS", "https://builder.example, https://admin.example")
+    monkeypatch.setenv("AUTH_RATE_LIMIT_PER_MINUTE", "7")
+    monkeypatch.setenv("GENERATION_RATE_LIMIT_PER_MINUTE", "15")
 
     cfg = load_config(dotenv_path=_NO_DOTENV)
 
@@ -72,6 +74,8 @@ def test_load_config_reads_session_and_cors_settings(monkeypatch) -> None:
         "https://builder.example",
         "https://admin.example",
     )
+    assert cfg.auth_rate_limit_per_minute == 7
+    assert cfg.generation_rate_limit_per_minute == 15
 
 
 def test_cors_settings_can_be_read_without_loading_dotenv_into_environment(

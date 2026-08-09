@@ -27,7 +27,10 @@ vi.mock("./api", () => ({
   savePage: vi.fn(),
   fetchRevisions: vi.fn(),
   restoreRevision: vi.fn(),
+  createCheckpoint: vi.fn(),
+  duplicateRevision: vi.fn(),
   fetchConversation: vi.fn(),
+  saveConversationDocument: vi.fn(),
 }));
 
 import { useStore } from "./store";
@@ -82,6 +85,7 @@ describe("document revision workflows", () => {
       activePageId: null,
       activePageVersion: 0,
       revisions: [],
+      checkpointName: "",
       sectionsError: null,
       templatesError: null,
       dnasError: null,
@@ -213,6 +217,21 @@ describe("document revision workflows", () => {
     vi.useRealTimers();
   });
 
+  it("persists standalone document edits to the durable conversation", async () => {
+    vi.useFakeTimers();
+    vi.mocked(api.saveConversationDocument).mockResolvedValue();
+    useStore.setState({ code: "<html>old</html>", activePageId: null });
+
+    useStore.getState().setCodeWithHistory("<html>edited</html>");
+    await vi.advanceTimersByTimeAsync(800);
+
+    expect(api.saveConversationDocument).toHaveBeenCalledWith(
+      useStore.getState().threadId,
+      "<html>edited</html>",
+    );
+    vi.useRealTimers();
+  });
+
   it("ignores a late save response after the active project changes", async () => {
     let resolveSave!: (value: typeof page) => void;
     vi.mocked(api.savePage).mockReturnValue(new Promise((resolve) => {
@@ -274,6 +293,41 @@ describe("document revision workflows", () => {
     expect(api.archiveProject).toHaveBeenCalledWith("project-1");
     expect(useStore.getState().activeProjectId).toBeNull();
     expect(useStore.getState().activePageId).toBeNull();
+  });
+
+  it("duplicates a project from the selected historical revision", async () => {
+    const historicalCopy = {
+      ...project,
+      id: "project-2",
+      name: "Launch · v1",
+      pages: [
+        {
+          ...page,
+          id: "page-2",
+          project_id: "project-2",
+          html: "<html>historical</html>",
+        },
+      ],
+    };
+    useStore.setState({
+      projects: [project],
+      activeProjectId: "project-1",
+      activePageId: "page-1",
+      activePageVersion: 2,
+      saveState: "saved",
+    });
+    vi.mocked(api.duplicateRevision).mockResolvedValue(historicalCopy);
+    vi.mocked(api.fetchProject).mockResolvedValue(historicalCopy);
+
+    await useStore.getState().duplicateRevision("revision-1", 1);
+
+    expect(api.duplicateRevision).toHaveBeenCalledWith(
+      "page-1",
+      "revision-1",
+      "Launch · v1",
+    );
+    expect(useStore.getState().activeProjectId).toBe("project-2");
+    expect(useStore.getState().code).toBe("<html>historical</html>");
   });
 
   it("surfaces and clears sidebar resource load errors", async () => {

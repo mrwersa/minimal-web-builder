@@ -28,8 +28,11 @@ from server.auth import AuthService
 from server.auth_routes import Authenticated
 from server.auth_routes import router as auth_router
 from server.concurrency import offload
-from server.content import DocumentValidationError
+from server.content import DocumentValidationError, validate_document
+from server.control_routes import router as control_router
+from server.controls import IdempotencyConflictError, RequestControlService
 from server.database import Database
+from server.mutations import run_idempotent
 from server.orchestrator import ConversationValidationError, GenerationOrchestrator
 from server.project_routes import router as project_router
 from server.projects import (
@@ -38,6 +41,7 @@ from server.projects import (
     ProjectValidationError,
     VersionConflictError,
 )
+from server.request_controls import enforce_request_controls
 from server.runtime import GenerationClient, build_client, generate, regenerate_section
 from src.a11y import audit_generated_html
 from src.config import cors_origins_from_env
@@ -82,6 +86,8 @@ async def lifespan(app: FastAPI) -> typing.AsyncIterator[None]:
     app.state.projects = ProjectService(app.state.database.sessions)
     app.state.assets = ReusableAssetService(app.state.database.sessions)
     app.state.orchestrator = GenerationOrchestrator(app.state.database.sessions)
+    app.state.controls = RequestControlService(app.state.database.sessions)
+    app.state.controls.recover_stale_records()
     app.state.orchestrator.recover_interrupted_jobs()
     try:
         app.state.profiles = load_profiles(PROFILES_DIR)
@@ -104,6 +110,8 @@ app.add_middleware(
 app.include_router(auth_router)
 app.include_router(asset_router)
 app.include_router(project_router)
+app.include_router(control_router)
+app.middleware("http")(enforce_request_controls)
 
 
 @app.exception_handler(ProjectNotFoundError)
@@ -134,6 +142,13 @@ async def content_validation_handler(
     _request: Request, exc: ValueError
 ) -> JSONResponse:
     return JSONResponse(status_code=400, content={"detail": str(exc)})
+
+
+@app.exception_handler(IdempotencyConflictError)
+async def idempotency_conflict_handler(
+    _request: Request, exc: IdempotencyConflictError
+) -> JSONResponse:
+    return JSONResponse(status_code=409, content={"detail": str(exc)})
 
 
 @app.exception_handler(VersionConflictError)
@@ -179,6 +194,7 @@ class GenerateRequest(BaseModel):
     current_code: str | None = None
     layout_dna_guidance: str = ""
     constraints: dict[str, Any] | None = None
+    thread_id: str | None = None
 
 
 class SectionRegenRequest(BaseModel):
@@ -191,6 +207,7 @@ class SectionRegenRequest(BaseModel):
     profile: str | None = None
     layout_dna_guidance: str = ""
     refine_aspect: str | None = None
+    thread_id: str | None = None
 
 
 class ExportRequest(BaseModel):
@@ -256,7 +273,9 @@ def _effective_settings(
 
 
 @app.post("/api/generate")
-async def generate_page(req: GenerateRequest, principal: Authenticated) -> JSONResponse:
+async def generate_page(
+    req: GenerateRequest, principal: Authenticated, request: Request
+) -> JSONResponse:
     cfg = _client().config
     s = _effective_settings(req)
 
@@ -300,6 +319,14 @@ async def generate_page(req: GenerateRequest, principal: Authenticated) -> JSONR
         if raw.startswith("API error:"):
             raise HTTPException(status_code=502, detail=raw)
         sanitized, safety_alerts, notes = _sanitize_output(strip_html_code_fence(raw))
+        if req.thread_id:
+            _orchestrator().checkpoint_document(
+                principal.id,
+                req.thread_id,
+                prompt,
+                "Generated the page.",
+                sanitized,
+            )
         return {
             "html": sanitized,
             "safety_alerts": safety_alerts,
@@ -312,12 +339,14 @@ async def generate_page(req: GenerateRequest, principal: Authenticated) -> JSONR
             },
         }
 
-    result = await offload(
-        _orchestrator().execute,
-        principal.id,
-        "generate",
+    result = await run_idempotent(
+        request,
+        principal,
+        "generation.generate",
         req.model_dump(),
-        perform,
+        lambda: _orchestrator().execute(
+            principal.id, "generate", req.model_dump(), perform
+        ),
     )
     return JSONResponse(result)
 
@@ -334,7 +363,9 @@ class ChatRequest(BaseModel):
 
 
 @app.post("/api/chat")
-async def chat(req: ChatRequest, principal: Authenticated) -> JSONResponse:
+async def chat(
+    req: ChatRequest, principal: Authenticated, request: Request
+) -> JSONResponse:
     """Conversational agent endpoint powered by LangGraph.
 
     Maintains conversation memory per ``thread_id`` across turns. The agent
@@ -360,14 +391,19 @@ async def chat(req: ChatRequest, principal: Authenticated) -> JSONResponse:
             f"{settings.get('extra_guidance', '')}\n{req.layout_dna_guidance}".strip()
         )
 
-    result = await offload(
-        _orchestrator().chat,
-        principal.id,
-        req.thread_id,
-        validated,
-        req.current_code,
-        settings,
-        _client(),
+    result = await run_idempotent(
+        request,
+        principal,
+        "generation.chat",
+        req.model_dump(),
+        lambda: _orchestrator().chat(
+            principal.id,
+            req.thread_id,
+            validated,
+            req.current_code,
+            settings,
+            _client(),
+        ),
     )
     return JSONResponse(result)
 
@@ -391,6 +427,27 @@ class SectionsRequest(BaseModel):
     code: str
 
 
+class ConversationDocumentRequest(BaseModel):
+    code: str
+
+
+@app.put("/api/conversations/{thread_id}/document")
+async def conversation_document_update(
+    thread_id: str,
+    body: ConversationDocumentRequest,
+    principal: Authenticated,
+    request: Request,
+) -> dict[str, Any]:
+    code = validate_document(body.code)
+    return await run_idempotent(
+        request,
+        principal,
+        "conversation.document",
+        {"thread_id": thread_id, "code": code},
+        lambda: _orchestrator().update_document(principal.id, thread_id, code),
+    )
+
+
 @app.post("/api/sections")
 async def list_sections(req: SectionsRequest) -> dict[str, Any]:
     sections = extract_sections(req.code)
@@ -403,7 +460,7 @@ async def list_sections(req: SectionsRequest) -> dict[str, Any]:
 
 @app.post("/api/generate-section")
 async def generate_section(
-    req: SectionRegenRequest, principal: Authenticated
+    req: SectionRegenRequest, principal: Authenticated, request: Request
 ) -> JSONResponse:
     s = _effective_settings(req)
     sections = extract_sections(req.code)
@@ -435,18 +492,29 @@ async def generate_section(
             raise HTTPException(
                 status_code=422, detail="Could not parse regenerated section"
             )
+        updated = replace_section(req.code, section, replacement)
+        if req.thread_id:
+            _orchestrator().checkpoint_document(
+                principal.id,
+                req.thread_id,
+                req.instructions or f"Regenerate section {req.section_index}",
+                "Regenerated the selected section.",
+                updated,
+            )
         return {
-            "html": replace_section(req.code, section, replacement),
+            "html": updated,
             "safety_alerts": safety_alerts,
             "notes": notes,
         }
 
-    result = await offload(
-        _orchestrator().execute,
-        principal.id,
-        "generate_section",
+    result = await run_idempotent(
+        request,
+        principal,
+        "generation.generate_section",
         req.model_dump(),
-        perform,
+        lambda: _orchestrator().execute(
+            principal.id, "generate_section", req.model_dump(), perform
+        ),
     )
     return JSONResponse(result)
 

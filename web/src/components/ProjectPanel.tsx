@@ -6,6 +6,7 @@ import {
   FolderKanban,
   Pencil,
   RotateCcw,
+  BookmarkPlus,
   Search,
   X,
 } from "lucide-react";
@@ -211,6 +212,25 @@ export default function ProjectPanel() {
         )}
       </div>
 
+      {s.activePageId && (
+        <div className="flex gap-1.5">
+          <Input
+            value={s.checkpointName}
+            onChange={(event) => s.set("checkpointName", event.target.value)}
+            placeholder="Checkpoint name"
+            maxLength={120}
+          />
+          <Button
+            variant="outline"
+            onClick={() => void s.createCheckpoint()}
+            disabled={!s.checkpointName.trim() || s.saveState === "saving"}
+            title="Save named checkpoint"
+          >
+            <BookmarkPlus className="h-3.5 w-3.5" />
+          </Button>
+        </div>
+      )}
+
       {s.revisions.length > 1 && (
         <details className="rounded-lg border border-border2 p-2">
           <summary className="cursor-pointer text-xs font-medium text-muted">
@@ -223,16 +243,25 @@ export default function ProjectPanel() {
                 className="flex items-center justify-between rounded px-1.5 py-1 text-xs text-muted2"
               >
                 <span>
-                  v{revision.sequence} · {revision.source}
+                  v{revision.sequence} · {revision.name ?? revision.source}
                 </span>
-                <button
-                  onClick={() => s.restoreRevision(revision.id)}
-                  disabled={revision.sequence === s.activePageVersion}
-                  aria-label={`Restore version ${revision.sequence}`}
-                  className="rounded p-1 hover:bg-accentSoft hover:text-accent disabled:opacity-30"
-                >
-                  <RotateCcw className="h-3.5 w-3.5" />
-                </button>
+                <span className="flex">
+                  <button
+                    onClick={() => void s.duplicateRevision(revision.id, revision.sequence)}
+                    aria-label={`Duplicate version ${revision.sequence}`}
+                    className="rounded p-1 hover:bg-accentSoft hover:text-accent"
+                  >
+                    <Copy className="h-3.5 w-3.5" />
+                  </button>
+                  <button
+                    onClick={() => s.restoreRevision(revision.id)}
+                    disabled={revision.sequence === s.activePageVersion}
+                    aria-label={`Restore version ${revision.sequence}`}
+                    className="rounded p-1 hover:bg-accentSoft hover:text-accent disabled:opacity-30"
+                  >
+                    <RotateCcw className="h-3.5 w-3.5" />
+                  </button>
+                </span>
               </div>
             ))}
           </div>
